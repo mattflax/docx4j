@@ -1270,19 +1270,33 @@ public class XHTMLImporter {
         } else  {
             log.debug( inlineBox.getTextNode().getTextContent() );  // don't use .getText()
 
-            String theText = inlineBox.getTextNode().getTextContent(); 
+            String theText = inlineBox.getTextNode().getTextContent();
+            String[] tabsText = theText.split("\t");
+            
             log.debug("Processing " + theText);
+            if (tabsText.length > 1) {
+            	log.debug("Split by tab into " + tabsText.length + " parts");
+            }
+            
+            R run = Context.getWmlObjectFactory().createR();
+        	for (int i = 0; i < tabsText.length; i ++) {
+        		if (i > 0) {
+        			run.getContent().add(Context.getWmlObjectFactory().createRTab());
+        		}
+        		// Only create a text node if there's some text to put in it
+        		if (tabsText[i].length() > 0) {
+                    Text text = Context.getWmlObjectFactory().createText();
+                    text.setValue( tabsText[i] );
+                    if (theText.startsWith(" ")
+                    		|| theText.endsWith(" ") ) {
+                    	text.setSpace("preserve");
+                    }
+                    run.getContent().add(text);
+        		}
+        	}
             
             paraStillEmpty = false;                                    
                         
-            R run = Context.getWmlObjectFactory().createR();
-            Text text = Context.getWmlObjectFactory().createText();
-            text.setValue( theText );
-            if (theText.startsWith(" ")
-            		|| theText.endsWith(" ") ) {
-            	text.setSpace("preserve");
-            }
-            run.getContent().add(text);
             
             currentP.getContent().add(run);
             
@@ -1298,7 +1312,7 @@ public class XHTMLImporter {
 //                                    }
         }
 	}
-    
+	
     private PPr addParagraphProperties(Map cssMap) {
 
         PPr pPr =  Context.getWmlObjectFactory().createPPr();
