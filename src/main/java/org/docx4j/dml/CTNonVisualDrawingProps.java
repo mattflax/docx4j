@@ -43,6 +43,7 @@ import javax.xml.bind.annotation.XmlType;
  *       &lt;/sequence>
  *       &lt;attribute name="id" use="required" type="{http://schemas.openxmlformats.org/drawingml/2006/main}ST_DrawingElementId" />
  *       &lt;attribute name="name" use="required" type="{http://www.w3.org/2001/XMLSchema}string" />
+ *       &lt;attribute name="title" type="{http://www.w3.org/2001/XMLSchema}string" />
  *       &lt;attribute name="descr" type="{http://www.w3.org/2001/XMLSchema}string" default="" />
  *       &lt;attribute name="hidden" type="{http://www.w3.org/2001/XMLSchema}boolean" default="false" />
  *     &lt;/restriction>
@@ -71,6 +72,8 @@ public class CTNonVisualDrawingProps {
     protected String descr;
     @XmlAttribute
     protected Boolean hidden;
+    @XmlAttribute
+    protected String title;
 
     /**
      * Gets the value of the hlinkClick property.
@@ -239,5 +242,13 @@ public class CTNonVisualDrawingProps {
     public void setHidden(Boolean value) {
         this.hidden = value;
     }
+
+	public String getTitle() {
+		return title;
+	}
+
+	public void setTitle(String title) {
+		this.title = title;
+	}
 
 }
