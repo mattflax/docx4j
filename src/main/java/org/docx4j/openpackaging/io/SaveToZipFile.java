@@ -99,7 +99,7 @@ public class SaveToZipFile {
 
 	/* Save a Package as a Zip file in the file system */
 	public boolean save(java.io.File docxFile) throws Docx4JException  {
-		log.info("Saving to" +  docxFile.getPath() );		
+		log.info("Saving to " +  docxFile.getPath() );		
 		try {
 			if (docxFile.getPath().toLowerCase().endsWith(".xml") ) {
 				return saveFlatOPC(new FileOutputStream(docxFile));
