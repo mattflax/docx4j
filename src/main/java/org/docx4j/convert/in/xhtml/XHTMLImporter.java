@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
 import java.io.StringReader;
-import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -66,7 +65,6 @@ import org.docx4j.org.xhtmlrenderer.docx.DocxRenderer;
 import org.docx4j.org.xhtmlrenderer.layout.Styleable;
 import org.docx4j.org.xhtmlrenderer.newtable.TableBox;
 import org.docx4j.org.xhtmlrenderer.newtable.TableCellBox;
-import org.docx4j.org.xhtmlrenderer.newtable.TableSectionBox;
 import org.docx4j.org.xhtmlrenderer.render.AnonymousBlockBox;
 import org.docx4j.org.xhtmlrenderer.render.BlockBox;
 import org.docx4j.org.xhtmlrenderer.render.Box;
@@ -164,18 +162,18 @@ public class XHTMLImporter {
 		hyperlinkStyleId = hyperlinkStyleID;
 	}
 	private static String hyperlinkStyleId = null;	
-    private List<Object> imports = new ArrayList<Object>(); 
+    private final List<Object> imports = new ArrayList<Object>(); 
 //    public List<Object>  getImportedContent() {
 //    	return imports;
 //    }
     
     private P currentP;
     
-    private WordprocessingMLPackage wordMLPackage;
-    private RelationshipsPart rp;
+    private final WordprocessingMLPackage wordMLPackage;
+    private final RelationshipsPart rp;
     private NumberingDefinitionsPart ndp;
     
-    private ListHelper listHelper;
+    private final ListHelper listHelper;
     
     private DocxRenderer renderer;
     
@@ -187,7 +185,7 @@ public class XHTMLImporter {
     	listHelper = new ListHelper();
     	
 		if (hyperlinkStyleId !=null && wordMLPackage instanceof WordprocessingMLPackage) {
-			((WordprocessingMLPackage)wordMLPackage).getMainDocumentPart().getPropertyResolver().activateStyle(hyperlinkStyleId);
+			wordMLPackage.getMainDocumentPart().getPropertyResolver().activateStyle(hyperlinkStyleId);
 		}
     }
 
@@ -1128,7 +1126,7 @@ public class XHTMLImporter {
     	log.debug(inlineBox.toString());
 
         // Doesn't extend box
-        Styleable s = ((InlineBox)inlineBox );
+        Styleable s = (inlineBox );
         if (s.getStyle()==null) { // Assume this won't happen
         	log.error("getStyle returned null!");
         }
@@ -1271,7 +1269,8 @@ public class XHTMLImporter {
             log.debug( inlineBox.getTextNode().getTextContent() );  // don't use .getText()
 
             String theText = inlineBox.getTextNode().getTextContent();
-            String[] tabsText = theText.split("\t");
+            // Split using negative limit, so trailing tabs are included
+            String[] tabsText = theText.split("\t", -1);
             
             log.debug("Processing " + theText);
             if (tabsText.length > 1) {
