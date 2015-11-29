@@ -1,23 +1,42 @@
+/*
+   Licensed to Plutext Pty Ltd under one or more contributor license agreements.  
+   
+ *  This file is part of docx4j.
+
+    docx4j is licensed under the Apache License, Version 2.0 (the "License"); 
+    you may not use this file except in compliance with the License. 
+
+    You may obtain a copy of the License at 
+
+        http://www.apache.org/licenses/LICENSE-2.0 
+
+    Unless required by applicable law or agreed to in writing, software 
+    distributed under the License is distributed on an "AS IS" BASIS, 
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+    See the License for the specific language governing permissions and 
+    limitations under the License.
+
+ */
 package org.docx4j.model.images;
 
 import java.io.UnsupportedEncodingException;
-import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 
 import org.apache.commons.codec.binary.Base64;
-import org.apache.log4j.Logger;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.parts.WordprocessingML.BinaryPart;
 import org.docx4j.relationships.Relationship;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public abstract class AbstractConversionImageHandler implements ConversionImageHandler {
 	
-	protected static Logger log = Logger.getLogger(AbstractConversionImageHandler.class);
+	protected static Logger log = LoggerFactory.getLogger(AbstractConversionImageHandler.class);
 	protected String uuid = UUID.randomUUID().toString();
 	protected Map<String, String> handledImagesMap = new TreeMap<String, String>();
-	protected String imageDirPath = null;
+	protected String imageDirPath = null;  // TODO FIXME should not be here; move to FileConversionImageHandler
 	protected boolean includeUUID = true;
 	
 	/** Creates an AbstractConversionImageHandler
@@ -146,12 +165,7 @@ public abstract class AbstractConversionImageHandler implements ConversionImageH
 	 * @return
 	 */
 	protected byte[] getImageData(BinaryPart binaryPart) {
-	byte[] bytes = null;
-	ByteBuffer bb = binaryPart.getBuffer();
-		bb.clear();
-		bytes = new byte[bb.capacity()];
-		bb.get(bytes, 0, bytes.length);
-		return bytes;
+		return binaryPart.getBytes();
 	}
 
 	/**

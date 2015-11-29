@@ -20,21 +20,17 @@
 
 package org.docx4j.openpackaging.parts.PresentationML;
 
-import java.util.List;
+import java.io.IOException;
 
-import javax.xml.bind.Binder;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.UnmarshalException;
 import javax.xml.bind.Unmarshaller;
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.Templates;
 import javax.xml.transform.dom.DOMResult;
 
-import org.apache.log4j.Logger;
+import org.apache.commons.io.IOUtils;
 import org.docx4j.XmlUtils;
-import org.docx4j.jaxb.JAXBAssociation;
 import org.docx4j.jaxb.JaxbValidationEventHandler;
-import org.docx4j.jaxb.XPathBinderAssociationIsPartialException;
 import org.docx4j.openpackaging.exceptions.InvalidFormatException;
 import org.docx4j.openpackaging.parts.Part;
 import org.docx4j.openpackaging.parts.PartName;
@@ -44,13 +40,14 @@ import org.pptx4j.model.ResolvedLayout;
 import org.pptx4j.pml.CommonSlideData;
 import org.pptx4j.pml.ObjectFactory;
 import org.pptx4j.pml.Sld;
-import org.w3c.dom.Node;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 
 public final class SlidePart extends JaxbPmlPart<Sld> {
 	
-	protected static Logger log = Logger.getLogger(SlidePart.class);	
+	protected static Logger log = LoggerFactory.getLogger(SlidePart.class);	
 	
 	public SlidePart(PartName partName) throws InvalidFormatException {
 		super(partName);
@@ -95,6 +92,53 @@ public final class SlidePart extends JaxbPmlPart<Sld> {
 	}	
 
 	
+	private static final String VML_DECL = "xmlns:v=\"urn:schemas-microsoft-com:vml\"";
+
+    /**
+	 * Marshal the content tree rooted at <tt>jaxbElement</tt> into an output
+	 * stream
+	 * 
+	 * @param os
+	 *            XML will be added to this stream.
+	 * @param namespacePrefixMapper
+	 *            namespacePrefixMapper
+	 * 
+	 * @throws JAXBException
+	 *             If any unexpected problem occurs during the marshalling.
+	 */
+	@Override
+    public void marshal(java.io.OutputStream os, Object namespacePrefixMapper) throws JAXBException {
+
+		// Add xmlns:v="urn:schemas-microsoft-com:vml" eg in
+        // <mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+        // <mc:Choice xmlns:v="urn:schemas-microsoft-com:vml" Requires="v">		
+		// How?  Could marshall to a DOM doc, but there is no way to force the xmlns to be included
+		// where it is not required.  Well, JAXB namespace prefix mapping stuff promises a way, but it is buggy.
+		// So do string manipulation
+    	
+		String xmlString = XmlUtils.marshaltoString( getJaxbElement(), false, true, jc ); 
+			// include the XML declaration; it'll be UTF-8
+		int pos = xmlString.indexOf(":sld ");
+		int closeTagPos = xmlString.indexOf(">", pos);
+		if (xmlString.substring(pos, closeTagPos).contains(VML_DECL)) {
+			// nothing to do; vml namespace is already declared
+		} else {
+			xmlString = xmlString.substring(0, pos + 5 ) +  VML_DECL + " " + xmlString.substring(pos + 5 );
+		}
+		
+		try {
+			IOUtils.write(xmlString, os, "UTF-8"); // be sure to write UTF-8 irrespective of default encoding
+			/* FIX confirmed by running a presentation containing eg mög
+			 * through RoundTripTest, 
+			 * with run configuration setting -Dfile.encoding=ISO-8859-1,
+			 * verified Powerpoint (2010) can open it.
+			 */
+		} catch (IOException e) {
+			throw new JAXBException(e.getMessage(), e);
+		}
+			
+	}	
+	
     /**
      * Unmarshal XML data from the specified InputStream and return the 
      * resulting content tree.  Validation event location information may
@@ -115,15 +159,12 @@ public final class SlidePart extends JaxbPmlPart<Sld> {
 		try {
 			
 			// InputStream to Document
-			javax.xml.parsers.DocumentBuilderFactory dbf 
-				= DocumentBuilderFactory.newInstance();
-			dbf.setNamespaceAware(true);
-			org.w3c.dom.Document doc = dbf.newDocumentBuilder().parse(is);
+			org.w3c.dom.Document doc = XmlUtils.getNewDocumentBuilder().parse(is);
 
 			
 			/* Note: 2013 04 25
 			 * 
-			 * If a slide contains:
+			 * If a slide (or slide master etc) contains:
 			 * 
 		          <a:graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole">
 		            <mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
@@ -162,6 +203,10 @@ public final class SlidePart extends JaxbPmlPart<Sld> {
 		     *  that'll do its own thing with namespaces, but we could with regex).
 		     *  
 		     *  But it is better, I think to always get rid of the alternate content entirely.
+		     *  
+		     *  2015 07 29 Update:  since we do add the VML namespace (see marshal method above),
+		     *  there is no need to remove it during unmashalling, so we could get rid of this
+		     *  Override.  But not for 3.2.2 which is so close to release.
 			 */
 			
 			log.info("proactively pre-processing to remove any AlternateContent");
@@ -255,13 +300,14 @@ public final class SlidePart extends JaxbPmlPart<Sld> {
 			return jaxbElement;
 			
 		} catch (JAXBException e) {
-			log.error(e);
+			log.error(e.getMessage(), e);
 			throw e;
 		}
 	}	
     
     NotesSlidePart notes;
     SlideLayoutPart layout;
+    CommentsPart comments;
     
 	public boolean setPartShortcut(Part part) {
 		
@@ -294,6 +340,9 @@ public final class SlidePart extends JaxbPmlPart<Sld> {
 		} else if (relationshipType.equals(Namespaces.PRESENTATIONML_SLIDE_LAYOUT)) {
 			layout = (SlideLayoutPart)part;
 			return true;					
+		} else if (relationshipType.equals(Namespaces.PRESENTATIONML_COMMENTS)) {
+			comments = (CommentsPart)part;
+			return true;					
 		} else {	
 			return false;
 		}
@@ -304,6 +353,13 @@ public final class SlidePart extends JaxbPmlPart<Sld> {
 	}
 	public SlideLayoutPart getSlideLayoutPart() {
 		return layout;
+	}
+	
+	/**
+	 * @since 3.2.0
+	 */
+	public CommentsPart getCommentsPart() {
+		return comments;
 	}
 	
     

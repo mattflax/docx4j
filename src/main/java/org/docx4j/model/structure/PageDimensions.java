@@ -22,13 +22,14 @@ package org.docx4j.model.structure;
 
 import java.math.BigInteger;
 
-import org.apache.log4j.Logger;
 import org.docx4j.Docx4jProperties;
 import org.docx4j.jaxb.Context;
 import org.docx4j.wml.STPageOrientation;
 import org.docx4j.wml.SectPr;
 import org.docx4j.wml.SectPr.PgMar;
 import org.docx4j.wml.SectPr.PgSz;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Wraps PgSz (Page size) and PgMar (margin settings).
@@ -45,7 +46,7 @@ import org.docx4j.wml.SectPr.PgSz;
  */
 public class PageDimensions {
 	
-	protected static Logger log = Logger.getLogger(PageDimensions.class);
+	protected static Logger log = LoggerFactory.getLogger(PageDimensions.class);
 	
 	
 	public PageDimensions() {
@@ -78,7 +79,7 @@ public class PageDimensions {
 	private void init(PgSz pgSz, PgMar pgMar) {
 		
 		if (pgSz == null) {
-			log.warn("No pgSz in this section; defaulting.");
+			log.info("No pgSz in this section; defaulting.");
 			this.pgSz = Context.getWmlObjectFactory().createSectPrPgSz();			
 			setPgSize();
 		} else {
@@ -86,7 +87,7 @@ public class PageDimensions {
 		}
 		
 		if (pgMar ==null) {
-			log.warn("No pgMar in this section; defaulting.");
+			log.info("No pgMar in this section; defaulting.");
 			this.pgMar = Context.getWmlObjectFactory().createSectPrPgMar();			
 			setMargins();
 		} else {
@@ -205,11 +206,11 @@ public class PageDimensions {
 	public void setPgSize() {
 		
 		String papersize= Docx4jProperties.getProperties().getProperty("docx4j.PageSize", "A4");
-		log.info("Using paper size: " + papersize);
+		log.debug("Using paper size: " + papersize);
 		
 		String landscapeString = Docx4jProperties.getProperties().getProperty("docx4j.PageOrientationLandscape", "false");
 		boolean landscape= Boolean.parseBoolean(landscapeString);
-		log.info("Landscape orientation: " + landscape);
+		log.debug("Landscape orientation: " + landscape);
 				
 		setPgSize(PageSizePaper.valueOf(papersize), landscape);		
 	}	
@@ -270,6 +271,19 @@ public class PageDimensions {
 			}
 		}
 
+		else if (sz.equals(PageSizePaper.A5)) {
+			pgSz.setCode(BigInteger.valueOf(11));
+			if (landscape) {
+				pgSz.setOrient(STPageOrientation.LANDSCAPE);
+				pgSz.setW(BigInteger.valueOf(11907));
+				pgSz.setH(BigInteger.valueOf(8391));
+			} else {
+				pgSz.setW(BigInteger.valueOf(8391));
+				pgSz.setH(BigInteger.valueOf(11907));
+
+			}
+		}
+		
 		else if (sz.equals(PageSizePaper.B4JIS)) {
 			pgSz.setCode(BigInteger.valueOf(12));
 			if (landscape) {
@@ -285,10 +299,25 @@ public class PageDimensions {
 	}	
 	
 		
-	public int getWritableWidthTwips() {		
-		return pgSz.getW().intValue() - (pgMar.getLeft().intValue() + pgMar.getRight().intValue());
+	public int getWritableWidthTwips() {
+		
+		int gutter = 0;		
+		if (pgMar.getGutter()!=null) {
+			gutter = pgMar.getGutter().intValue();
+		}
+		
+		return pgSz.getW().intValue() - (gutter + pgMar.getLeft().intValue() + pgMar.getRight().intValue());
 	}
 
+	/**headers/footers into account!
+	 * Doesn't take 
+	 * 
+	 * @since 3.0.1
+	 */
+	@Deprecated
+	public int getWritableHeightTwips() {		
+		return pgSz.getH().intValue() - (pgMar.getTop().intValue() + pgMar.getBottom().intValue());
+	}
 	
 	/* From http://msdn.microsoft.com/en-us/library/aa537167(office.11).aspx 
 	 * 
@@ -320,8 +349,9 @@ public class PageDimensions {
 	 */
 	public int getHeaderMargin() {
 		if (pgMar.getHeader()==null 
-				|| pgMar.getHeader().intValue() ==0 ) {
-			return 708;
+//				|| pgMar.getHeader().intValue() ==0 
+				) {
+			return 720; //default in Word 2010 is 1/2 inch
 		} else {
 			return pgMar.getHeader().intValue();
 		}
@@ -332,35 +362,12 @@ public class PageDimensions {
 	 */
 	public int getFooterMargin() {
 		if (pgMar.getFooter()==null 
-				|| pgMar.getFooter().intValue() ==0 ) {
-			return 1440;
+//				|| pgMar.getFooter().intValue() ==0 
+				) {
+			return 720; //default in Word 2010 is 1/2 inch
 		} else {
 			return pgMar.getFooter().intValue();
 		}
 	}
-	
-	int headerExtent = 708;
-	/**
-	 * Get the height of the header. In Word, the size of header and footer areas can change dynamically;
-	 * for PDF output, you need to set this appropriately.  It defaults to 708 TWIPs 
-	 */
-	public int getHeaderExtent() {
-		return headerExtent;
-	}
-	public void setHeaderExtent(int headerExtent) {
-		this.headerExtent = headerExtent;
-	}
-
-	int footerExtent = 708;
-	/**
-	 * Get the height of the footer. In Word, the size of header and footer areas can change dynamically;
-	 * for PDF output, you need to set this appropriately.  It defaults to 708 TWIPs 
-	 */
-	public int getFooterExtent() {
-		return footerExtent;
-	}
-	public void setFooterExtent(int footerExtent) {
-		this.footerExtent = footerExtent;
-	}
-	
+		
 }

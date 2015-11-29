@@ -20,42 +20,26 @@
 package org.docx4j.openpackaging.parts;
 
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.nio.ByteBuffer;
 import java.util.List;
 
 import javax.xml.bind.Binder;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.UnmarshalException;
 import javax.xml.bind.Unmarshaller;
-import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.namespace.QName;
 import javax.xml.transform.Templates;
 import javax.xml.transform.dom.DOMResult;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.log4j.Logger;
-import org.docx4j.TraversalUtil;
 import org.docx4j.XmlUtils;
-import org.docx4j.convert.in.xhtml.XHTMLImporter;
-import org.docx4j.jaxb.Context;
 import org.docx4j.jaxb.JAXBAssociation;
 import org.docx4j.jaxb.JaxbValidationEventHandler;
 import org.docx4j.jaxb.XPathBinderAssociationIsPartialException;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.exceptions.InvalidFormatException;
 import org.docx4j.openpackaging.io3.stores.PartStore;
-import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
-import org.docx4j.openpackaging.parts.WordprocessingML.AltChunkInterface;
-import org.docx4j.openpackaging.parts.WordprocessingML.AltChunkType;
-import org.docx4j.openpackaging.parts.WordprocessingML.AlternativeFormatInputPart;
-import org.docx4j.openpackaging.parts.relationships.RelationshipsPart.AddPartBehaviour;
-import org.docx4j.relationships.Relationship;
-import org.docx4j.utils.AltChunkFinder;
-import org.docx4j.utils.AltChunkFinder.LocatedChunk;
-import org.docx4j.wml.CTAltChunk;
-import org.docx4j.wml.ContentAccessor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Node;
 
 /**
@@ -65,7 +49,7 @@ import org.w3c.dom.Node;
 public abstract class JaxbXmlPartXPathAware<E> extends JaxbXmlPart<E> 
 implements XPathEnabled<E> {
 	
-	protected static Logger log = Logger.getLogger(JaxbXmlPartXPathAware.class);
+	protected static Logger log = LoggerFactory.getLogger(JaxbXmlPartXPathAware.class);
 
 	public JaxbXmlPartXPathAware(PartName partName)
 			throws InvalidFormatException {
@@ -100,11 +84,11 @@ implements XPathEnabled<E> {
 			// below if jaxbElement has already been set
 			// using setJaxbElement (which doesn't create 
 			// binder)
-			PartStore partStore = this.getPackage().getPartStore();
+			PartStore partStore = this.getPackage().getSourcePartStore();
 			
 			InputStream is = null;
 			try {
-				String name = this.partName.getName();
+				String name = this.getPartName().getName();
 				
 				try {
 					this.setContentLengthAsLoaded(
@@ -116,30 +100,46 @@ implements XPathEnabled<E> {
 				if (is==null) {
 					log.warn(name + " missing from part store");
 				} else {
-					log.info("Lazily unmarshalling " + name);
+					log.debug("Lazily unmarshalling " + name);
 					unmarshal( is );
 				}
 			} catch (JAXBException e) {
-				log.error(e);
+				log.error(e.getMessage(), e);
 			} catch (Docx4JException e) {
-				log.error(e);
+				log.error(e.getMessage(), e);
 			} finally {
 				IOUtils.closeQuietly(is);
 			}		
+		} else if (binder==null) {
+			// User might have set jaxb element, without creating a binder	
+			try {
+				log.debug("creating binder for " + this.getJaxbElement().getClass().getName());
+				org.w3c.dom.Document doc =  XmlUtils.neww3cDomDocument();
+				this.marshal(doc);
+				unmarshal( doc.getDocumentElement() );
+			} catch (JAXBException e) {
+				log.error(e.getMessage(), e);
+			} 
 		}
 		
 		return binder;
 	}
 
-	/* Don't override setJaxbElement(E jaxbElement) to create	  	
-	 * binder here, since that would set the
-	 * jaxbElement field to something different to
-	 * the object being passed in, leading to
-	 * calling code doing something different to what it thinks it 
-	 * is doing! (ie backwards compatibility would be broken).
+	/** You can't use this override to create/update a binder, since this would set the
+	 * jaxbElement field to something different to the object being passed in 
+	 * (as a consequence of the process to create a binder).
 	 * 
-	 * That's why we have this new method createBinderAndJaxbElement
+	 * We don't want that, because calling code may then continue to manipulate
+	 * the field, without effect..
+	 * 
+	 * See instead createBinderAndJaxbElement
 	 */
+	@Override
+	public void setJaxbElement(E jaxbElement) {
+		super.setJaxbElement(jaxbElement);
+		binder=null; // any existing binder is invalid
+	}
+	
 	
 	/**
 	 * Set the JAXBElement for this part, and a corresponding
@@ -154,8 +154,8 @@ implements XPathEnabled<E> {
 	public E createBinderAndJaxbElement(E source) throws JAXBException {
 		
 		// In order to create binder:-
-		log.info("creating binder");
-		org.w3c.dom.Document doc = XmlUtils.marshaltoW3CDomDocument(jaxbElement);
+		log.debug("creating binder");
+		org.w3c.dom.Document doc = XmlUtils.marshaltoW3CDomDocument(source);
 		unmarshal(doc.getDocumentElement());
 		// return the newly created object, so calling code can use it in place
 		// of their source object
@@ -181,8 +181,9 @@ implements XPathEnabled<E> {
 	public List<Object> getJAXBNodesViaXPath(String xpathExpr, boolean refreshXmlFirst) 
 			throws JAXBException, XPathBinderAssociationIsPartialException {
 		
+		Binder<Node> binder = getBinder();
 		E el = getJaxbElement();
-		return XmlUtils.getJAXBNodesViaXPath(getBinder(), el, xpathExpr, refreshXmlFirst);
+		return XmlUtils.getJAXBNodesViaXPath(binder, el, xpathExpr, refreshXmlFirst);
 	}	
 
 	/**
@@ -277,6 +278,26 @@ implements XPathEnabled<E> {
 		
 	}	
 	
+	private void unwrapUsually(Binder<Node> binder, Node doc) throws JAXBException {
+		
+		jaxbElement =  (E) XmlUtils.unwrap(binder.unmarshal( doc ));
+		// Unwrap, so we have eg CTEndnotes, not JAXBElement
+	
+		// .. but we do need to leave it wrapped, 
+		// if there is not @XmlRootElement annotation 
+		if (jaxbElement instanceof org.docx4j.dml.chartDrawing.CTDrawing) {
+			// Check it
+			Object tmp = binder.unmarshal( doc );
+			if (tmp instanceof javax.xml.bind.JAXBElement) {
+				QName qname = ((javax.xml.bind.JAXBElement)tmp).getName();
+				if (qname.equals( org.docx4j.dml.chart.ObjectFactory._UserShapes_QNAME)) {
+					jaxbElement=(E)tmp;	
+				}
+			}
+		}
+				
+	}
+	
     /**
      * Unmarshal XML data from the specified InputStream and return the 
      * resulting content tree.  Validation event location information may
@@ -295,12 +316,9 @@ implements XPathEnabled<E> {
     public E unmarshal( java.io.InputStream is ) throws JAXBException {
 		try {
 			
-			log.info("For " + this.getClass().getName() + ", unmarshall via binder");
+			log.debug("For " + this.getClass().getName() + ", unmarshall via binder");
 			// InputStream to Document
-			javax.xml.parsers.DocumentBuilderFactory dbf 
-				= DocumentBuilderFactory.newInstance();
-			dbf.setNamespaceAware(true);
-			org.w3c.dom.Document doc = dbf.newDocumentBuilder().parse(is);
+			org.w3c.dom.Document doc = XmlUtils.getNewDocumentBuilder().parse(is);
 
 			// 
 			binder = jc.createBinder();
@@ -312,15 +330,22 @@ implements XPathEnabled<E> {
 			binder.setEventHandler(eventHandler);
 			
 			try {
-				jaxbElement =  (E) XmlUtils.unwrap(binder.unmarshal( doc ));
-					// Unwrap, so we have eg CTEndnotes, not JAXBElement
-			} catch (UnmarshalException ue) {
+				unwrapUsually(binder,  doc);  // unlikely to need this in the code below
+					
+			} catch (Exception ue) {
+
+				if (ue instanceof UnmarshalException) {
+					// Usually..
+				} else {
+					// eg java.lang.NumberFormatException
+					log.warn( ue.getMessage(), ue);
+				}
 				
 				if (is.markSupported() ) {
 					// When reading from zip, we use a ByteArrayInputStream,
 					// which does support this.
-				
-					log.info("encountered unexpected content; pre-processing");
+									
+					log.info("encountered unexpected content in " + this.getPartName() + "; pre-processing");
 					/* Always try our preprocessor, since if what is first encountered is
 					 * eg:
 					 * 
@@ -384,8 +409,9 @@ implements XPathEnabled<E> {
 						
 					}
 				} else {
-					log.error(ue);
-					log.error(".. and mark not supported");
+					log.warn("problem in " + this.getPartName() ); 					
+					log.warn(ue.getMessage(), ue);
+					log.warn(".. and mark not supported");
 					throw ue;
 				}
 			}
@@ -393,8 +419,25 @@ implements XPathEnabled<E> {
 			return jaxbElement;
 			
 		} catch (Exception e ) {
-			e.printStackTrace();
-			return null;
+//			e.printStackTrace();
+//			return null;
+			
+			/* java.lang.NullPointerException
+				at com.sun.org.apache.xerces.internal.impl.dtd.XMLDTDProcessor.startDTD(Unknown Source)
+				at com.sun.org.apache.xerces.internal.impl.XMLDTDScannerImpl.scanDTDInternalSubset(Unknown Source)
+				at com.sun.org.apache.xerces.internal.impl.XMLDocumentScannerImpl$DTDDriver.dispatch(Unknown Source)
+				at com.sun.org.apache.xerces.internal.impl.XMLDocumentScannerImpl$DTDDriver.next(Unknown Source)
+				at com.sun.org.apache.xerces.internal.impl.XMLDocumentScannerImpl$PrologDriver.next(Unknown Source)
+			 */
+			for ( int i=0 ; i<e.getStackTrace().length; i++) {
+				if (e.getStackTrace()[i].getClassName().contains("DTD")
+						|| e.getStackTrace()[i].getMethodName().contains("DTD")) {
+					// Mimic Word 2010 message
+					throw new JAXBException("DTD is prohibited", e);
+				}
+			}
+			
+			throw new JAXBException(e.getMessage(), e);
 		}
     }
 
@@ -405,7 +448,7 @@ implements XPathEnabled<E> {
     public E unmarshal(org.w3c.dom.Element el) throws JAXBException {
 
 		try {
-			log.info("For " + this.getClass().getName() + ", unmarshall via binder");
+			log.debug("For " + this.getClass().getName() + ", unmarshall via binder");
 
 			binder = jc.createBinder();
 			JaxbValidationEventHandler eventHandler = new JaxbValidationEventHandler();
@@ -413,8 +456,18 @@ implements XPathEnabled<E> {
 			binder.setEventHandler(eventHandler);
 			
 			try {
-				jaxbElement =  (E) XmlUtils.unwrap(binder.unmarshal( el ));
-			} catch (UnmarshalException ue) {
+//				jaxbElement =  (E) XmlUtils.unwrap(binder.unmarshal( el ));
+				unwrapUsually(binder,  el);  // unlikely to need this in the code below
+				
+				
+			} catch (Exception ue) {
+				if (ue instanceof UnmarshalException) {
+					// Usually..
+				} else {
+					// eg java.lang.NumberFormatException
+					log.warn( ue.getMessage(), ue);
+					log.info(".. can recover if problem is w:tblW/@w:w");					
+				}
 				log.info("encountered unexpected content; pre-processing");
 				org.w3c.dom.Document doc = null;
 				try {
@@ -444,7 +497,7 @@ implements XPathEnabled<E> {
 			return jaxbElement;
 			
 		} catch (JAXBException e) {
-			log.error(e);
+			log.error(e.getMessage(), e);
 			throw e;
 		}
 	}

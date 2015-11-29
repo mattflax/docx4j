@@ -26,9 +26,9 @@ import java.io.InputStream;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.docx4j.jaxb.NamespacePrefixMapperUtils;
-import org.docx4j.utils.Log4jConfigurator;
 import org.docx4j.utils.ResourceUtils;
 
 public class Context {
@@ -43,19 +43,20 @@ public class Context {
 	
 	public static JAXBContext jcPML;
 	
-	private static Logger log = Logger.getLogger(Context.class);
+	private static Logger log = LoggerFactory.getLogger(Context.class);
 	
 	
 	static {
-
-		Log4jConfigurator.configure();
 		
 		// Display diagnostic info about version of JAXB being used.
 		log.info("java.vendor="+System.getProperty("java.vendor"));
 		log.info("java.version="+System.getProperty("java.version"));
 		
 		org.docx4j.jaxb.Context.searchManifestsForJAXBImplementationInfo( ClassLoader.getSystemClassLoader());
-		if (ClassLoader.getSystemClassLoader()!=Thread.currentThread().getContextClassLoader()) {
+		if (Thread.currentThread().getContextClassLoader()==null) {
+			log.warn("ContextClassLoader is null for current thread");
+			// Happens with IKVM 
+		} else if (ClassLoader.getSystemClassLoader()!=Thread.currentThread().getContextClassLoader()) {
 			org.docx4j.jaxb.Context.searchManifestsForJAXBImplementationInfo(Thread.currentThread().getContextClassLoader());
 		}
 		
@@ -87,18 +88,14 @@ public class Context {
 			}
 		} catch (JAXBException e) {
 			log.error("PANIC! No suitable JAXB implementation available");
+			log.error(e.getMessage(), e);
 			e.printStackTrace();
 		}
 		
 		try {	
 			
-			// JBOSS might use a different class loader to load JAXBContext, which causes problems,
-			// so explicitly specify our class loader.
-			Context tmp = new Context();
-			java.lang.ClassLoader classLoader = tmp.getClass().getClassLoader();
-			//log.info("\n\nClassloader: " + classLoader.toString() );			
-			
-			log.info("loading Context jcPML");			
+			java.lang.ClassLoader classLoader = Context.class.getClassLoader();
+
 			jcPML = JAXBContext.newInstance("org.pptx4j.pml:" +
 					"org.docx4j.dml:org.docx4j.dml.chart:org.docx4j.dml.chartDrawing:org.docx4j.dml.compatibility:org.docx4j.dml.diagram:org.docx4j.dml.lockedCanvas:org.docx4j.dml.picture:org.docx4j.dml.wordprocessingDrawing:org.docx4j.dml.spreadsheetdrawing:" +
 					"org.docx4j.mce", 
@@ -112,7 +109,7 @@ public class Context {
 			
 			
 		} catch (Exception ex) {
-			ex.printStackTrace();
+			log.error("Cannot initialize context", ex);
 		}				
 	}
 	

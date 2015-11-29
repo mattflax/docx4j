@@ -3,11 +3,13 @@
  */
 package org.docx4j.model.fields;
 
+import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.apache.log4j.Logger;
 import org.docx4j.Docx4jProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * From http://stackoverflow.com/questions/3389348/parse-any-date-in-java
@@ -19,7 +21,7 @@ import org.docx4j.Docx4jProperties;
  */
 public class DateFormatInferencer {
 	
-	private static Logger log = Logger.getLogger(DateFormatInferencer.class);		
+	private static Logger log = LoggerFactory.getLogger(DateFormatInferencer.class);		
 	
 	private static final Map<String, String> DATE_FORMAT_REGEXPS = new HashMap<String, String>();
 	

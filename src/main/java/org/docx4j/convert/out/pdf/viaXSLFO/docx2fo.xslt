@@ -36,6 +36,17 @@
 
   -->
         
+<!-- * * * * * * * * * * * * * * * * * * * * * * * * * *
+ 
+     WARNING: this copy for docx2fo.xslt is deprecated!
+     
+     See instead org.docx4j.convert.out.fo/docx2fo.xslt
+
+     * * * * * * * * * * * * * * * * * * * * * * * * * *
+ --> 
+
+
+
 
 <!-- =======================================
 
@@ -286,7 +297,7 @@
 
 					<!--  Info -->
 					<xsl:copy-of 
-						select="java:org.docx4j.convert.out.Converter.message($conversionContext, 'TO HIDE THESE MESSAGES, TURN OFF log4j debug level logging for org.docx4j.convert.out.Converter ' )" />  	  		
+						select="java:org.docx4j.convert.out.Converter.message($conversionContext, 'TO HIDE THESE MESSAGES, TURN OFF debug level logging for org.docx4j.convert.out.common.writer.AbstractMessageWriter ' )" />  	  		
 
 					<!--<xsl:apply-templates select="w:body/*" />-->
 					<xsl:apply-templates select="*" />
@@ -348,12 +359,9 @@
   <xsl:template match="w:r">
   
   	<xsl:choose>
-  		<xsl:when test="java:org.docx4j.convert.out.pdf.viaXSLFO.Conversion.inFieldGetState($conversionContext)" >
-  			<!-- in a field, so ignore, unless this run contains a fldChar or instrText -->
-  			
+  		<xsl:when test="java:org.docx4j.convert.out.Converter.isInComplexFieldDefinition($conversionContext)" >
+  			<!-- in a field, so ignore, unless this run contains fldChar -->
 		  	<xsl:if test="w:fldChar"><xsl:apply-templates/></xsl:if>
-  			
-  			<xsl:if test="w:instrText"><xsl:apply-templates/></xsl:if>
   			
   		</xsl:when>
   		<xsl:otherwise>
@@ -592,7 +600,8 @@
 				<fo:block break-before="page" />
 			</xsl:when>
 			<xsl:otherwise>
-				<fo:block white-space-treatment="preserve"> </fo:block>
+				<fo:block white-space-treatment="preserve"> 
+				</fo:block>
 			</xsl:otherwise>
 		</xsl:choose>
 	</xsl:template>
@@ -767,20 +776,10 @@
 	  			$conversionContext,., $childResults)"/>	  		
   </xsl:template>
 
-  <!--  Complex fields: only PAGE is supported -->
+  <!--  Complex fields: update complex field definition level -->
   <xsl:template match="w:fldChar" >
 		<xsl:copy-of 
-			select="java:org.docx4j.convert.out.pdf.viaXSLFO.Conversion.inFieldUpdateState($conversionContext, .)" />  	
-  </xsl:template>
-
-  <xsl:template match="w:instrText" >
-		<xsl:variable name="childResults">
-			<xsl:apply-templates/>
-		</xsl:variable>
-			
-		<xsl:copy-of 
-			select="java:org.docx4j.convert.out.pdf.viaXSLFO.Conversion.createBlockForInstrText(
-		  		$conversionContext, ., $childResults)" />
+			select="java:org.docx4j.convert.out.Converter.updateComplexFieldDefinition($conversionContext, .)" />  	
   </xsl:template>
   
    <xsl:template match="w:customXml">

@@ -19,25 +19,18 @@
  */
 package org.docx4j.model.properties.paragraph;
 
-import org.apache.log4j.Logger;
-import org.docx4j.UnitsOfMeasurement;
 import org.docx4j.jaxb.Context;
-import org.docx4j.model.properties.Property;
-import org.docx4j.wml.BooleanDefaultTrue;
 import org.docx4j.wml.CTBorder;
 import org.docx4j.wml.PPr;
-import org.docx4j.wml.RPr;
-import org.docx4j.wml.STBorder;
-import org.docx4j.wml.TblBorders;
-import org.docx4j.wml.TblPr;
-import org.docx4j.wml.TcPrInner;
 import org.docx4j.wml.PPrBase.PBdr;
-import org.w3c.dom.Element;
+import org.docx4j.wml.TcPrInner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.css.CSSValue;
 
 public class PBorderBottom extends AbstractPBorder {
 	
-	protected static Logger log = Logger.getLogger(PBorderBottom.class);	
+	protected static Logger log = LoggerFactory.getLogger(PBorderBottom.class);	
 	
 	
 	private final static String CSS_NAME_BASE = "border-bottom"; 

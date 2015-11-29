@@ -30,11 +30,13 @@ import javax.xml.bind.Marshaller;
 import javax.xml.bind.UnmarshalException;
 import javax.xml.bind.Unmarshaller;
 import javax.xml.bind.util.JAXBResult;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
 import javax.xml.transform.Templates;
 import javax.xml.transform.stream.StreamSource;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.log4j.Logger;
 import org.docx4j.XmlUtils;
 import org.docx4j.jaxb.Context;
 import org.docx4j.jaxb.JaxbValidationEventHandler;
@@ -42,7 +44,8 @@ import org.docx4j.jaxb.NamespacePrefixMapperUtils;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.exceptions.InvalidFormatException;
 import org.docx4j.openpackaging.io3.stores.PartStore;
-import org.docx4j.wml.Numbering;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** OPC Parts are either XML, or binary (or text) documents.
  * 
@@ -69,7 +72,7 @@ import org.docx4j.wml.Numbering;
  * */
 public abstract class JaxbXmlPart<E> extends Part {
 	
-	protected static Logger log = Logger.getLogger(JaxbXmlPart.class);
+	protected static Logger log = LoggerFactory.getLogger(JaxbXmlPart.class);
 	
 	// This class is abstract
 	// Most applications ought to be able to instantiate
@@ -103,18 +106,39 @@ public abstract class JaxbXmlPart<E> extends Part {
 	/** The content tree (ie JAXB representation of the Part) */
 	protected E jaxbElement = null;
 
-	public E getJaxbElement() {
+	/**
+	 * Get the live contents of this part (the JAXB object model).
+	 * (An alias/synonym for older getJaxbElement(), but now throws exception)
+	 * @throws Docx4JException
+	 * @return
+	 * @since 3.0
+	 */
+	public E getContents() throws Docx4JException {
 		
 		// Lazy unmarshal
 		InputStream is = null;
 		if (jaxbElement==null) {
-			PartStore partStore = this.getPackage().getPartStore();
+			if (this.getPackage()==null) {
+				log.warn("This part not added to a package, so its contents can't be retrieved. " );
+				return null;
+			}
+			PartStore partStore = this.getPackage().getSourcePartStore();
+			if (partStore==null) {
+				log.info("No PartStore defined for this package (it was probably created, not loaded). " );
+				log.info(this.getPartName().getName() + ": did you initialise its contents to something?");
+				return null;
+				// or we could create it, with a bit of effort;
+				// as to which see http://stackoverflow.com/questions/1090458/instantiating-a-generic-class-in-java
+			} 			
+			
 			try {
-				String name = this.partName.getName();
+				String name = this.getPartName().getName();
 				
 				try {
-					this.setContentLengthAsLoaded(
-							partStore.getPartSize( name.substring(1)));
+					if (partStore!=null) {
+						this.setContentLengthAsLoaded(
+								partStore.getPartSize( name.substring(1)));
+					}
 				} catch (UnsupportedOperationException uoe) {}
 					
 				is = partStore.loadPart( 
@@ -122,21 +146,46 @@ public abstract class JaxbXmlPart<E> extends Part {
 				if (is==null) {
 					log.warn(name + " missing from part store");
 				} else {
-					log.info("Lazily unmarshalling " + name);
+					log.debug("Lazily unmarshalling " + name);
 					unmarshal( is );
 				}
 			} catch (JAXBException e) {
-				log.error(e);
-			} catch (Docx4JException e) {
-				log.error(e);
+				log.error("Problem with part " + this.getPartName());
+				throw new Docx4JException(e.getMessage(), e);
+//			} catch (Docx4JException e) {
+//				log.error(e.getMessage(), e);
 			} finally {
 				IOUtils.closeQuietly(is);
 			}			
 		}
 		return jaxbElement;
 	}
+	
+	/**
+	 * Get the live contents of this part.
+	 * (getContents() is preferred, this is the older/less friendly method name)
+	 * @return
+	 */
+	@Deprecated
+	public E getJaxbElement() {
+		try {
+			return getContents();
+		} catch (Docx4JException e) {
+			log.error(e.getMessage(), e);
+			return null;
+		} 
+	}
 
 	public void setJaxbElement(E jaxbElement) {
+		this.jaxbElement = jaxbElement;
+	}
+	/**
+	 * Set the  contents of this part.
+	 * (Just an alias/synonym for setJaxbElement())
+	 * @param jaxbElement
+	 * @since 3.0
+	 */
+	public void setContents(E jaxbElement) {
 		this.jaxbElement = jaxbElement;
 	}
 	
@@ -178,8 +227,8 @@ public abstract class JaxbXmlPart<E> extends Part {
 		String wmlTemplateString = null;
 		if (jaxbElement==null) {
 
-			PartStore partStore = this.getPackage().getPartStore();
-			String name = this.partName.getName();
+			PartStore partStore = this.getPackage().getSourcePartStore();
+			String name = this.getPartName().getName();
 			InputStream is = partStore.loadPart( 
 					name.substring(1));
 			if (is==null) {
@@ -204,7 +253,8 @@ public abstract class JaxbXmlPart<E> extends Part {
 		}
 		
 		// Do the replacement
-		jaxbElement = (E)XmlUtils.unmarshallFromTemplate(wmlTemplateString, mappings);
+		jaxbElement = (E)XmlUtils.unwrap(
+							XmlUtils.unmarshallFromTemplate(wmlTemplateString, mappings, jc));
 		
 	}
 	
@@ -248,15 +298,19 @@ public abstract class JaxbXmlPart<E> extends Part {
     public void marshal(org.w3c.dom.Node node, 
     		Object namespacePrefixMapper) throws JAXBException {
 
+    	
 		try {
 			Marshaller marshaller = jc.createMarshaller();
 			NamespacePrefixMapperUtils.setProperty(marshaller, namespacePrefixMapper);
-			getJaxbElement();
+			getContents();
+	    	setMceIgnorable();
 			marshaller.marshal(jaxbElement, node);
 
+		} catch (Docx4JException e) {
+			log.error(e.getMessage(), e);
+			throw new JAXBException(e);  // avoid change to method signature
 		} catch (JAXBException e) {
-//			e.printStackTrace();
-			log.error(e);
+			log.error(e.getMessage(), e);
 			throw e;
 		}
 	}
@@ -290,24 +344,73 @@ public abstract class JaxbXmlPart<E> extends Part {
 	 */
     public void marshal(java.io.OutputStream os, Object namespacePrefixMapper) throws JAXBException {
 
+    	
 		try {
 			Marshaller marshaller = jc.createMarshaller();
+			marshaller.setProperty("jaxb.formatted.output", true);
+			
 			NamespacePrefixMapperUtils.setProperty(marshaller, namespacePrefixMapper);
 			
-			log.info("marshalling " + this.getClass().getName() );	
-			getJaxbElement();
-			if (jaxbElement==null) {
-				log.error("No JAXBElement has been created for this part, yet!");
-				throw new JAXBException("No JAXBElement has been created for this part, yet!");
-			}
+			log.debug("marshalling " + this.getClass().getName() );	
+			getContents();
+//			if (jaxbElement==null) {
+//				log.error("No JAXBElement has been created for this part, yet!");
+//				throw new JAXBException("No JAXBElement has been created for this part, yet!");
+//			}
+	    	setMceIgnorable();
 			marshaller.marshal(jaxbElement, os);
 
+		} catch (Docx4JException e) {
+			log.error(e.getMessage(), e);
+			throw new JAXBException(e);  // avoid change to method signature
 		} catch (JAXBException e) {
-			//e.printStackTrace();
-			log.error(e);
+			log.error(e.getMessage(), e);
 			throw e;
 		}
 	}
+    
+    /**
+     * Where the mc:Ignorable attribute is present,
+     * ensure its contents matches the ignorable namespaces
+     * actually present.
+     */
+    protected void setMceIgnorable() {
+    /*	
+    	ECMA-376, Office Open XML File Formats, Part 3 deals with "Markup Compatibility and Extensibility", 
+    	and specifies mc:Ignorable.
+
+    	@mc:Ignorable, for example, in:
+
+	    	<Circles xmlns="http://schemas.openxmlformats.org/Circles/v1"
+	    	xmlns:mc="http://schemas.openxmlformats.org/markupcompatibility/
+	    	2006"
+	    	xmlns:v2="http://schemas.openxmlformats.org/Circles/v2"
+	    	xmlns:v3="http://schemas.openxmlformats.org/Circles/v3"
+	    	mc:Ignorable="v2 v3">
+	    	:
+
+    	is a whitespace-delimited list of namespace prefixes, where each namespace prefix identifies an 
+    	ignorable namespace.
+
+    	JAXB might not include a namespace declaration using prefix "v2", unless that namespace is required 
+    	in the resulting XML document.
+
+    	The problem is that if "v2" is included in the value of @mc:Ignorable, and there is no declaration 
+    	of that prefix, then Microsoft Word 2010 will report the document to be corrupt.
+
+    	So the challenge is, when marshalling, how to populate the mc:Ignorable attribute, and guarantee 
+    	a matching set of namespace declarations will be present.
+    	
+    	Suppose I have a set of ignorable prefixes (known a priori), some or all of which are used in the
+    	XML document. I want to either set the value of @mc:ignorable to the ignorable prefixes actually 
+    	used in the XML document (in which case JAXB will provide a matching set of namespace declarations), 
+    	or set the value of @mc:ignorable to the entire set of ignorable prefixes and force JAXB to declare 
+    	each of those prefixes. 
+    	
+    	Either approach is OK. In the Document Settings part, we use the first approach.  In the Main 
+    	Document Part, we use a hybrid approach.
+    */	    	
+    }
     
     /**
 	 * Unmarshal XML data from the specified InputStream and return the
@@ -327,6 +430,26 @@ public abstract class JaxbXmlPart<E> extends Part {
     public E unmarshal( java.io.InputStream is ) throws JAXBException {
     	
 		try {
+			/* To avoid possible XML External Entity Injection attack,
+			 * we need to configure the processor.
+			 * 
+			 * We use STAX XMLInputFactory to do that.
+			 * 
+			 * createXMLStreamReader(is) is 40% slower than unmarshal(is).
+			 * 
+			 * But it seems to be the best we can do ... 
+			 * 
+			 *   org.w3c.dom.Document doc = XmlUtils.getNewDocumentBuilder().parse(is)
+			 *   unmarshal(doc)
+			 * 
+			 * ie DOM is 5x slower than unmarshal(is)
+			 * 
+			 */
+		    
+	        XMLInputFactory xif = XMLInputFactory.newInstance();
+	        xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+	        xif.setProperty(XMLInputFactory.SUPPORT_DTD, false); // a DTD is merely ignored, its presence doesn't cause an exception
+	        XMLStreamReader xsr = xif.createXMLStreamReader(is);			
 		    
 			Unmarshaller u = jc.createUnmarshaller();
 			
@@ -339,8 +462,21 @@ public abstract class JaxbXmlPart<E> extends Part {
 			
 			try {
 				jaxbElement = (E) XmlUtils.unwrap(
-						u.unmarshal( is ));						
+						u.unmarshal( xsr ));						
 			} catch (UnmarshalException ue) {
+				
+				if (ue.getLinkedException()!=null 
+						&& ue.getLinkedException().getMessage().contains("entity")) {
+					
+					/*
+						Caused by: javax.xml.stream.XMLStreamException: ParseError at [row,col]:[10,19]
+						Message: The entity "xxe" was referenced, but not declared.
+							at com.sun.org.apache.xerces.internal.impl.XMLStreamReaderImpl.next(Unknown Source)
+							at com.sun.xml.internal.bind.v2.runtime.unmarshaller.StAXStreamConnector.bridge(Unknown Source)
+						 */
+					log.error(ue.getMessage(), ue);
+					throw ue;
+				}
 				
 				if (is.markSupported() ) {
 					// When reading from zip, we use a ByteArrayInputStream,
@@ -362,16 +498,16 @@ public abstract class JaxbXmlPart<E> extends Part {
 					}
 											
 				} else {
-					log.error(ue);
+					log.error(ue.getMessage(), ue);
 					log.error(".. and mark not supported");
 					throw ue;
 				}
 			}
 			
 
-		} catch (JAXBException e ) {
-			log.error(e);
-			throw e;
+		} catch (XMLStreamException e1) {
+			log.error(e1.getMessage(), e1);
+			throw new JAXBException(e1);
 		}
     	
 		return jaxbElement;
@@ -416,7 +552,7 @@ public abstract class JaxbXmlPart<E> extends Part {
 			return jaxbElement;
 			
 		} catch (JAXBException e) {
-			log.error(e);
+			log.error(e.getMessage(), e);
 			throw e;
 		}
 	}	

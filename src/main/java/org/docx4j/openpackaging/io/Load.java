@@ -28,8 +28,11 @@ import java.util.Iterator;
 
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.Unmarshaller;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamReader;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.docx4j.XmlUtils;
 import org.docx4j.docProps.coverPageProps.CoverPageProperties;
 import org.docx4j.jaxb.Context;
@@ -58,9 +61,10 @@ import org.docx4j.openpackaging.parts.relationships.Namespaces;
 import org.docx4j.relationships.Relationship;
 
 
+@Deprecated
 public class Load {
 
-	private static Logger log = Logger.getLogger(Load.class);
+	private static Logger log = LoggerFactory.getLogger(Load.class);
 	
 
 
@@ -180,8 +184,13 @@ public class Load {
 					
 					// Is it a part we know?
 					try {
+				        XMLInputFactory xif = XMLInputFactory.newInstance();
+				        xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+				        xif.setProperty(XMLInputFactory.SUPPORT_DTD, false); // a DTD is merely ignored, its presence doesn't cause an exception
+				        XMLStreamReader xsr = xif.createXMLStreamReader(is);									
+						
 						Unmarshaller u = Context.jc.createUnmarshaller();
-						Object o = u.unmarshal( is );						
+						Object o = u.unmarshal( xsr );						
 						log.info(o.getClass().getName());
 						
 						PartName name = part.getPartName();

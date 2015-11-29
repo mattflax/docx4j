@@ -22,7 +22,11 @@
 package org.docx4j.openpackaging;
 
 
-import org.apache.log4j.Logger;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.docx4j.openpackaging.contenttype.ContentType;
 import org.docx4j.openpackaging.exceptions.InvalidFormatException;
 import org.docx4j.openpackaging.packages.OpcPackage;
@@ -36,31 +40,31 @@ import org.docx4j.relationships.Relationship;
 
 public abstract class Base {
 
-	protected static Logger log = Logger.getLogger(Base.class);
+	protected static Logger log = LoggerFactory.getLogger(Base.class);
 
 	public abstract OpcPackage getPackage(); 
 	
-	private Object userData;
+	private Map<String, Object> userData = new HashMap<String, Object>();
 	/**
-	 * @return the userData
+	 * @param key
+	 * @return
 	 * @ since 3.0.0
 	 */
-	public Object getUserData() {
-		return userData;
+	public Object getUserData(String key) {
+		return userData.get(key);
 	}
-
 	/**
 	 * An object allowing the user of the docx4j
 	 * API to associate arbitrary data with this
 	 * package/part while the package is in memory. 
 	 * Note that the data is not saved when the package is
 	 * saved.
-	 * 
-	 * @param userData the userData to set
+	 * @param key
+	 * @param value
 	 * @ since 3.0.0
 	 */
-	public void setUserData(Object userData) {
-		this.userData = userData;
+	public void setUserData(String key, Object value) {
+		userData.put(key, value);
 	}
 
 	/**
@@ -138,6 +142,8 @@ public abstract class Base {
 	/**
 	 * The part name. (required by the specification [M1.1])
 	 * 
+	 * You should use the getter/setter, rather than accessing this field directly!
+	 * 
 	 * Note that in docx4J, part names should be resolved,
 	 * before being set, so that they are absolute
 	 * (ie start with '/').
@@ -145,8 +151,17 @@ public abstract class Base {
 	 * We will assume the Package has a part name of "/"
 	 * 
 	 */
+	@Deprecated
 	public PartName partName;
 
+	/**
+	 * @param partName
+	 * @since 3.2.0
+	 */
+	public void setPartName(PartName partName) {
+		this.partName = partName;
+	}
+	
 	/**
 	 * @return the uri
 	 */
@@ -284,7 +299,7 @@ public abstract class Base {
 		// Finally, set part shortcut if there is one to set
 		boolean shortcutSet = setPartShortcut(targetpart, targetpart.getRelationshipType());
 		if (shortcutSet) {
-			log.info("shortcut was set");			
+			log.debug("shortcut was set");			
 		}
 		
 		return rel;

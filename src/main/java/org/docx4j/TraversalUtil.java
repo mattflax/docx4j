@@ -25,11 +25,9 @@ import java.util.List;
 
 import javax.xml.bind.JAXBElement;
 
-import org.apache.log4j.Logger;
 import org.docx4j.dml.CTHyperlink;
 import org.docx4j.dml.CTNonVisualDrawingProps;
 import org.docx4j.dml.diagram.CTDataModel;
-import org.docx4j.jaxb.Context;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.WordprocessingML.CommentsPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.EndnotesPart;
@@ -44,15 +42,14 @@ import org.docx4j.utils.CompoundTraversalUtilVisitorCallback;
 import org.docx4j.utils.SingleTraversalUtilVisitorCallback;
 import org.docx4j.utils.TraversalUtilVisitor;
 import org.docx4j.wml.Body;
-import org.docx4j.wml.CTFtnEdn;
 import org.docx4j.wml.CTObject;
-import org.docx4j.wml.FldChar;
-import org.docx4j.wml.P;
-import org.docx4j.wml.Pict;
-import org.docx4j.wml.SdtContentBlock;
 import org.docx4j.wml.Comments.Comment;
+import org.docx4j.wml.FldChar;
+import org.docx4j.wml.Pict;
 import org.docx4j.wml.SdtBlock;
 import org.jvnet.jaxb2_commons.ppp.Child;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -77,7 +74,7 @@ import org.jvnet.jaxb2_commons.ppp.Child;
  */
 public class TraversalUtil {
 
-	private static Logger log = Logger.getLogger(TraversalUtil.class);
+	private static Logger log = LoggerFactory.getLogger(TraversalUtil.class);
 	
 	public interface Callback {
 
@@ -103,6 +100,9 @@ public class TraversalUtil {
 		 * @return whether the children of this node should be visited
 		 */
 		boolean shouldTraverse(Object o);
+		
+		// TODO for next gen interface, add
+		// List<Object> applyAfterWalkChildren(Object o);
 
 	}	
 
@@ -196,12 +196,19 @@ public class TraversalUtil {
 
 	Callback cb;
 
+	/**
+	 * Traverse the object using your callback.  Invoking this constructor starts the 
+	 * traverse, by invoking the callback's walkJAXBElements method.
+	 * 
+	 * @param parent
+	 * @param cb
+	 */
 	public TraversalUtil(Object parent, Callback cb) {
 
 		this.cb = cb;
 		cb.walkJAXBElements(parent);
 	}
-
+	
 	static void visitChildrenImpl(Object o) {
 
 	}
@@ -220,7 +227,7 @@ public class TraversalUtil {
         // Its not graphicData.getAny() we're typically interested in
         if (graphicData.getPic() != null && graphicData.getPic().getBlipFill() != null
                 && graphicData.getPic().getBlipFill().getBlip() != null) {
-            log.info("found CTBlip");
+            log.debug("found CTBlip");
             List<Object> artificialList = new ArrayList<Object>();
             if (!tmpArtificialList.isEmpty())
                 artificialList.addAll(tmpArtificialList);
@@ -273,7 +280,7 @@ public class TraversalUtil {
                 handleCTNonVisualDrawingProps(drawingProps, artificialList);
             }
             if (anchor.getGraphic() != null) {
-                log.info("found a:graphic");
+                log.debug("found a:graphic");
                 org.docx4j.dml.Graphic graphic = anchor.getGraphic();
                 if (graphic.getGraphicData() != null) {
                     artificialList.addAll(handleGraphicData(graphic.getGraphicData()));
@@ -289,7 +296,7 @@ public class TraversalUtil {
                 handleCTNonVisualDrawingProps(drawingProps, artificialList);
             }
             if (inline.getGraphic() != null) {
-                log.info("found a:graphic");
+                log.debug("found a:graphic");
                 org.docx4j.dml.Graphic graphic = inline.getGraphic();
                 if (graphic.getGraphicData() != null) {
                     artificialList.addAll(handleGraphicData(graphic.getGraphicData()));
@@ -307,7 +314,7 @@ public class TraversalUtil {
 			org.docx4j.dml.picture.Pic dmlPic = ((org.docx4j.dml.picture.Pic)o);
 			if (dmlPic.getBlipFill()!=null
 					&& dmlPic.getBlipFill().getBlip()!=null) {
-					log.info("found DML Blip");
+					log.debug("found DML Blip");
 					List<Object> artificialList = new ArrayList<Object>();
 					artificialList.add(dmlPic.getBlipFill().getBlip());
 					return artificialList;
@@ -319,7 +326,7 @@ public class TraversalUtil {
 			org.docx4j.dml.CTGvmlPicture dmlPic = ((org.docx4j.dml.CTGvmlPicture)o);
 			if (dmlPic.getBlipFill()!=null
 					&& dmlPic.getBlipFill().getBlip()!=null) {
-					log.info("found DML Blip");
+					log.debug("found DML Blip");
 					List<Object> artificialList = new ArrayList<Object>();
 					artificialList.add(dmlPic.getBlipFill().getBlip());
 					return artificialList;
@@ -518,7 +525,7 @@ public class TraversalUtil {
 
 		 */
 
-		log.debug("Clearing " + o.getClass().getName() );
+		//log.debug("Clearing " + o.getClass().getName() );
 		
 		if (o instanceof org.docx4j.wml.ContentAccessor) {
 
@@ -537,7 +544,7 @@ public class TraversalUtil {
 
 		} else {
 			
-			log.warn("Don't know how to replaceChildren in " + o.getClass().getName() ); 
+			log.info("Don't know how to replaceChildren in " + o.getClass().getName() ); 
 
 			if (o instanceof org.w3c.dom.Node) {
 				log.warn(" IGNORED " + ((org.w3c.dom.Node) o).getNodeName());

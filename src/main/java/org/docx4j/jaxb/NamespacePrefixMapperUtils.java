@@ -4,11 +4,12 @@ import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class NamespacePrefixMapperUtils {
 	
-	private static Logger log = Logger.getLogger(NamespacePrefixMapperUtils.class);		
+	private static Logger log = LoggerFactory.getLogger(NamespacePrefixMapperUtils.class);		
 	
 	/*
 	 * As from 2010 08 26,  
@@ -32,19 +33,23 @@ public class NamespacePrefixMapperUtils {
 	private static Object prefixMapper;
 	private static Object prefixMapperRels;
 	
+	private static boolean haveTried = false;
 	
 	public static Object getPrefixMapper() throws JAXBException {
 		
 		if (prefixMapper!=null) return prefixMapper;
 		
+		if (haveTried) return null;
+		// will be true soon..
+		haveTried = true;
+		
 		if (testContext==null) {
-			
-			// JBOSS might use a different class loader to load JAXBContext, which causes problems,
-			// so explicitly specify our class loader.
-			NamespacePrefixMapperUtils tmp = new NamespacePrefixMapperUtils();
-			java.lang.ClassLoader classLoader = tmp.getClass().getClassLoader();
-			
+			java.lang.ClassLoader classLoader = NamespacePrefixMapperUtils.class.getClassLoader();
 			testContext = JAXBContext.newInstance("org.docx4j.relationships",classLoader );
+		}
+		
+		if (testContext==null) {
+			throw new JAXBException("Couldn't create context for org.docx4j.relationships.  Everything is broken!");
 		}
 		
 		Marshaller m=testContext.createMarshaller();
@@ -91,12 +96,7 @@ public class NamespacePrefixMapperUtils {
 
 		if (prefixMapperRels!=null) return prefixMapperRels;
 		if (testContext==null) {
-			
-			// JBOSS might use a different class loader to load JAXBContext, which causes problems,
-			// so explicitly specify our class loader.
-			NamespacePrefixMapperUtils tmp = new NamespacePrefixMapperUtils();
-			java.lang.ClassLoader classLoader = tmp.getClass().getClassLoader();
-			
+			java.lang.ClassLoader classLoader = NamespacePrefixMapperUtils.class.getClassLoader();
 			testContext = JAXBContext.newInstance("org.docx4j.relationships",classLoader );
 		}
 		
@@ -173,11 +173,10 @@ public class NamespacePrefixMapperUtils {
 //				System.out.println("setProperty: com.sun.xml.INTERNAL.bind.namespacePrefixMapper");
 			}
 			
-		} catch (javax.xml.bind.PropertyException cnfe) {
+		} catch (javax.xml.bind.PropertyException e) {
 			
-//			cnfe.printStackTrace();
-			log.error(cnfe);
-			throw cnfe;
+			log.error(e.getMessage(), e);
+			throw e;
 			
 		}
 		

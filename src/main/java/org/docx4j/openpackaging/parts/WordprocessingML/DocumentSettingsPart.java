@@ -20,19 +20,23 @@
 
 package org.docx4j.openpackaging.parts.WordprocessingML;
 
-import org.apache.log4j.Logger;
+import org.docx4j.jaxb.Context;
+import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.exceptions.InvalidFormatException;
-import org.docx4j.openpackaging.parts.JaxbXmlPart;
 import org.docx4j.openpackaging.parts.JaxbXmlPartXPathAware;
 import org.docx4j.openpackaging.parts.PartName;
 import org.docx4j.openpackaging.parts.relationships.Namespaces;
+import org.docx4j.wml.CTCompat;
+import org.docx4j.wml.CTCompatSetting;
 import org.docx4j.wml.CTSettings;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 
 public final class DocumentSettingsPart extends JaxbXmlPartXPathAware<CTSettings> { 
 	
-	private final static Logger log = Logger.getLogger(DocumentSettingsPart.class);
+	private final static Logger log = LoggerFactory.getLogger(DocumentSettingsPart.class);
 	
 	// This unmarshalls as a JAXBElement; so we override getJaxbElement()
 	
@@ -57,4 +61,94 @@ public final class DocumentSettingsPart extends JaxbXmlPartXPathAware<CTSettings
 				
 	}
 		
+	@Override
+	protected void setMceIgnorable() {
+
+		boolean needW14 = false;
+		if (this.jaxbElement.getDocId14()!=null) {
+			needW14 = true;
+		} else if (this.jaxbElement.getConflictMode() !=null) {
+			needW14 = true;
+		} else if (this.jaxbElement.getDiscardImageEditingData() !=null) {
+			needW14 = true;
+		} else if (this.jaxbElement.getDefaultImageDpi() !=null) {
+			needW14 = true;
+		}
+		
+		boolean needW15 = false;		
+		if (this.jaxbElement.getChartTrackingRefBased()!=null) {
+			needW15 = true;
+		} else if (this.jaxbElement.getDocId15() !=null) {
+			needW15 = true;
+		}
+		
+		String mceIgnorableVal = "";
+		if (needW14) {
+			mceIgnorableVal = "w14";
+		}
+		
+		if (needW15) {
+			mceIgnorableVal += " w15";
+		} 
+		log.warn(mceIgnorableVal);
+		
+		this.jaxbElement.setIgnorable(mceIgnorableVal);
+    }
+	
+	/**
+	 * Get a compatibility setting in the Word namespace, by name
+	 * @param name
+	 * @return
+	 * @throws Docx4JException
+	 */
+	public CTCompatSetting getWordCompatSetting(String name) throws Docx4JException {
+	
+		CTCompat compat = this.getContents().getCompat();
+		if (compat==null) {
+			log.warn("No w:settings/w:compat element");
+			return null;
+		}
+		/* w:name="overrideTableStyleFontSizeAndJustification" 
+		 * w:uri="http://schemas.microsoft.com/office/word" 
+		 * w:val="1"
+		 */
+		CTCompatSetting theSetting = null;
+		for (CTCompatSetting setting : compat.getCompatSetting() ) {
+			if (setting.getUri().equals("http://schemas.microsoft.com/office/word")
+					&& setting.getName().equals(name)) {
+				theSetting = setting;
+				break;
+			}
+		}
+		
+		return theSetting;
+	}
+
+	public void setWordCompatSetting(String name, String val) throws Docx4JException {
+		
+		CTCompat compat = this.getContents().getCompat();
+		if (compat==null) {
+			log.debug("No w:settings/w:compat element; creating..");
+		}
+		compat = Context.getWmlObjectFactory().createCTCompat();
+		this.getContents().setCompat(compat);
+		
+		CTCompatSetting theSetting = null;
+		for (CTCompatSetting setting : compat.getCompatSetting() ) {
+			if (setting.getUri().equals("http://schemas.microsoft.com/office/word")
+					&& setting.getName().equals(name)) {
+				theSetting = setting;
+				break;
+			}
+		}
+		
+		if (theSetting==null) {
+			theSetting = Context.getWmlObjectFactory().createCTCompatSetting();
+			theSetting.setUri("http://schemas.microsoft.com/office/word");
+			theSetting.setName(name);
+			compat.getCompatSetting().add(theSetting);
+		}
+		theSetting.setVal(val);
+	}
+	
 }

@@ -22,7 +22,8 @@ package org.docx4j.model.datastorage;
 
 import javax.xml.bind.JAXBException;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.docx4j.XmlUtils;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.wml.P.Hyperlink;
@@ -38,7 +39,7 @@ import org.docx4j.wml.P.Hyperlink;
  */
 public class BindingHyperlinkResolver {
 	
-	private static Logger log = Logger.getLogger(BindingHyperlinkResolver.class);		
+	private static Logger log = LoggerFactory.getLogger(BindingHyperlinkResolver.class);		
 	
 	public void setHyperlinkStyle (
 			String hyperlinkStyleID) {
@@ -61,7 +62,7 @@ public class BindingHyperlinkResolver {
 	 */
 	public int getIndexOfURL(String text) {
 
-		System.out.println("processing " + text);		
+		log.debug("processing " + text);		
 		
 		int NOT_FOUND = 99999; // Since we'll calculate min, we don't want -1 for no match
 		int pos1 = text.indexOf("http://")==-1 ? NOT_FOUND : text.indexOf("http://");

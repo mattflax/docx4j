@@ -21,30 +21,17 @@ package org.docx4j.openpackaging.parts;
 
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.util.List;
 
-import javax.xml.bind.Binder;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.UnmarshalException;
-import javax.xml.bind.Unmarshaller;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.Templates;
-import javax.xml.transform.dom.DOMResult;
-
-import org.apache.log4j.Logger;
 import org.docx4j.TraversalUtil;
-import org.docx4j.XmlUtils;
 import org.docx4j.convert.in.xhtml.XHTMLImporter;
 import org.docx4j.jaxb.Context;
-import org.docx4j.jaxb.JAXBAssociation;
-import org.docx4j.jaxb.JaxbValidationEventHandler;
-import org.docx4j.jaxb.XPathBinderAssociationIsPartialException;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.exceptions.InvalidFormatException;
-import org.docx4j.openpackaging.io3.stores.PartStore;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.WordprocessingML.AltChunkInterface;
 import org.docx4j.openpackaging.parts.WordprocessingML.AltChunkType;
@@ -55,7 +42,8 @@ import org.docx4j.utils.AltChunkFinder;
 import org.docx4j.utils.AltChunkFinder.LocatedChunk;
 import org.docx4j.wml.CTAltChunk;
 import org.docx4j.wml.ContentAccessor;
-import org.w3c.dom.Node;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author jharrop
@@ -63,7 +51,7 @@ import org.w3c.dom.Node;
  */
 public abstract class JaxbXmlPartAltChunkHost<E> extends JaxbXmlPartXPathAware<E> implements AltChunkInterface {
 	
-	protected static Logger log = Logger.getLogger(JaxbXmlPartAltChunkHost.class);
+	protected static Logger log = LoggerFactory.getLogger(JaxbXmlPartAltChunkHost.class);
 
 	public JaxbXmlPartAltChunkHost(PartName partName)
 			throws InvalidFormatException {
@@ -169,6 +157,9 @@ public abstract class JaxbXmlPartAltChunkHost<E> extends JaxbXmlPartXPathAware<E
 	/* (non-Javadoc)
 	 * @see org.docx4j.openpackaging.parts.WordprocessingML.AltChunkInterface#processAltChunksOfTypeHTML()
 	 */
+	/**
+	 * To convert an altChunk of type XHTML, this method requires docx4j-XHTMLImport.jar (LGPL) and its dependencies.
+	 * */
 	@Override
 	public WordprocessingMLPackage convertAltChunks() throws Docx4JException {
 		
@@ -201,15 +192,27 @@ public abstract class JaxbXmlPartAltChunkHost<E> extends JaxbXmlPartXPathAware<E
 
 			if (type.equals(AltChunkType.Xhtml) ) {
 				
+				XHTMLImporter xHTMLImporter= null;
+			    try {
+			    	Class<?> xhtmlImporterClass = Class.forName("org.docx4j.convert.in.xhtml.XHTMLImporterImpl");
+				    Constructor<?> ctor = xhtmlImporterClass.getConstructor(WordprocessingMLPackage.class);
+				    xHTMLImporter = (XHTMLImporter) ctor.newInstance(clonePkg);
+			    } catch (Exception e) {
+			        log.warn("docx4j-XHTMLImport jar not found. Please add this to your classpath.");
+					log.warn(e.getMessage(), e);
+					return null;
+			    }		
+				
 	            List<Object> results = null;
 				try {
-					results = XHTMLImporter.convert(toString(afip.getBuffer()), 
-							null, clonePkg);
-				} catch (UnsupportedEncodingException e) {
+					
+					results = xHTMLImporter.convert(toString(afip.getBuffer()), null);
+					
+				} catch (Exception e) {
 					log.error(e.getMessage(), e);
 					// Skip this one
 					continue;
-				}
+				} 
 				
 				int index = locatedChunk.getIndex(); 
 				locatedChunk.getContentList().remove(index); // handles case where it is nested eg in a tc
@@ -278,13 +281,14 @@ public abstract class JaxbXmlPartAltChunkHost<E> extends JaxbXmlPartXPathAware<E
 			try {
 				// Use reflection, so docx4j can be built
 				// by users who don't have the MergeDocx utility
-				Class<?> documentBuilder = Class.forName("com.plutext.merge.ProcessAltChunk");			
+				Class<?> documentBuilder = Class.forName("com.plutext.merge.altchunk.ProcessAltChunk");			
 				//Method method = documentBuilder.getMethod("merge", wmlPkgList.getClass());			
 				Method[] methods = documentBuilder.getMethods(); 
 				Method method = null;
 				for (int j=0; j<methods.length; j++) {
 					System.out.println(methods[j].getName());
-					if (methods[j].getName().equals("process")) {
+					if (methods[j].getName().equals("process")
+							&& methods[j].getParameterTypes().length==1) {
 						method = methods[j];
 						break;
 					}
@@ -298,26 +302,26 @@ public abstract class JaxbXmlPartAltChunkHost<E> extends JaxbXmlPartXPathAware<E
 				return (WordprocessingMLPackage)method.invoke(null, clonePkg);
 				
 			} catch (SecurityException e) {
-				e.printStackTrace();
-				log.warn("* Skipping altChunk of type docx ");
+				log.error(e.getMessage(), e);
+				log.warn("Skipping altChunk of type docx ");
 				return clonePkg;
 			} catch (ClassNotFoundException e) {
 				extensionMissing(e);
 				return clonePkg;
 			} catch (IllegalArgumentException e) {
-				e.printStackTrace();
-				log.warn("* Skipping altChunk of type docx ");
+				log.error(e.getMessage(), e);
+				log.warn("Skipping altChunk of type docx ");
 				return clonePkg;
 			} catch (NoSuchMethodException e) {
 				extensionMissing(e);
 				return clonePkg;
 			} catch (IllegalAccessException e) {
-				e.printStackTrace();
-				log.warn("* Skipping altChunk of type docx ");
+				log.error(e.getMessage(), e);
+				log.warn("Skipping altChunk of type docx ");
 				return clonePkg;
 			} catch (InvocationTargetException e) {
-				e.printStackTrace();
-				log.warn("* Skipping altChunk of type docx ");
+				log.error(e.getMessage(), e);
+				log.warn("Skipping altChunk of type docx ");
 				return clonePkg;
 			} 
 			
@@ -329,10 +333,10 @@ public abstract class JaxbXmlPartAltChunkHost<E> extends JaxbXmlPartXPathAware<E
 	private void extensionMissing(Exception e) {
 		log.warn("\n" + e.getClass().getName() + ": " + e.getMessage() + "\n");
 		log.warn("* Skipping altChunk of type docx ");
-		log.warn("* You don't appear to have the MergeDocx paid extension,");
+		log.warn("* You don't appear to have the MergeDocx extension,");
 		log.warn("* which is necessary to merge docx, or process altChunk.");
-		log.warn("* Purchases of this extension support the docx4j project.");
-		log.warn("* Please email sales@plutext.com or visit www.plutext.com if you want to buy it.");
+		log.warn("* MergeDocx is part of the Enterprise Edition of docx4j.");
+		log.warn("* Please email sales@plutext.com or visit www.plutext.com if you want to try it.");
 	}
 	
 	private String toString(ByteBuffer bb) throws UnsupportedEncodingException {

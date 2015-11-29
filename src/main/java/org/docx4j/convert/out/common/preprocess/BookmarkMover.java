@@ -28,7 +28,8 @@ import java.util.TreeSet;
 import javax.xml.bind.JAXBElement;
 import javax.xml.namespace.QName;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.docx4j.TraversalUtil;
 import org.docx4j.XmlUtils;
 import org.docx4j.jaxb.Context;
@@ -50,7 +51,7 @@ import org.docx4j.wml.P;
  */
 public class BookmarkMover {
 	
-	protected static Logger log = Logger.getLogger(BookmarkMover.class);	
+	protected static Logger log = LoggerFactory.getLogger(BookmarkMover.class);	
 	
 	
 	/** Move bookmarks into a paragraph
@@ -61,6 +62,7 @@ public class BookmarkMover {
 	}
 	
 	protected static class BookmarkMoverVisitor extends AbstractTraversalUtilVisitorCallback {
+		
 		protected static final QName QNAME_BOOKMARK_START = new QName(Namespaces.NS_WORD12, "bookmarkStart");
 		protected static final QName QNAME_BOOKMARK_END = new QName(Namespaces.NS_WORD12, "bookmarkEnd");
 		protected List<Object> bookmarksStartToMove = new ArrayList<Object>();
@@ -119,9 +121,10 @@ public class BookmarkMover {
 		}
 
 		private void appendBookmarksToMove(Object child) {
-		CTBookmark bm = (CTBookmark)XmlUtils.unwrap(child);
-		JAXBElement<CTMarkupRange> jaxbBmEnd = null;
-		CTMarkupRange bmEnd = null;
+			
+			CTBookmark bm = (CTBookmark)XmlUtils.unwrap(child);
+			JAXBElement<CTMarkupRange> jaxbBmEnd = null;
+			CTMarkupRange bmEnd = null;
 			bookmarksStartToMove.add(child);
 		
 			//The bookmarkEnd is put directly after a moved bookmarkStart in the paragraph.
@@ -142,7 +145,12 @@ public class BookmarkMover {
 
 		private boolean removeBookmarkEnd(Object child) {
 			CTMarkupRange bmEnd = (CTMarkupRange)XmlUtils.unwrap(child);
-			return bookmarksEndToRemove.remove(bmEnd.getId());
+			if (bmEnd.getId()==null) {
+				// malformed -> remove it
+				return true;
+			} else {
+				return bookmarksEndToRemove.remove(bmEnd.getId());
+			}
 		}
 
 		private boolean isParagraph(Object child) {

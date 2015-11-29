@@ -21,7 +21,6 @@
 package org.docx4j.openpackaging.packages;
 
 
-import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.Map;
 import java.util.Set;
@@ -33,14 +32,12 @@ import javax.xml.transform.Source;
 import javax.xml.transform.Templates;
 import javax.xml.transform.stream.StreamSource;
 
-import org.apache.log4j.Logger;
 import org.docx4j.Docx4jProperties;
 import org.docx4j.XmlUtils;
 import org.docx4j.convert.out.flatOpcXml.FlatOpcXmlCreator;
 import org.docx4j.fonts.IdentityPlusMapper;
 import org.docx4j.fonts.Mapper;
 import org.docx4j.jaxb.Context;
-import org.docx4j.jaxb.NamespacePrefixMapperUtils;
 import org.docx4j.model.structure.DocumentModel;
 import org.docx4j.model.structure.HeaderFooterPolicy;
 import org.docx4j.model.structure.PageDimensions;
@@ -50,7 +47,6 @@ import org.docx4j.openpackaging.contenttype.ContentTypeManager;
 import org.docx4j.openpackaging.contenttype.ContentTypes;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.exceptions.InvalidFormatException;
-import org.docx4j.openpackaging.io.SaveToZipFile;
 import org.docx4j.openpackaging.parts.DocPropsCorePart;
 import org.docx4j.openpackaging.parts.DocPropsCustomPart;
 import org.docx4j.openpackaging.parts.DocPropsExtendedPart;
@@ -63,6 +59,8 @@ import org.docx4j.openpackaging.parts.relationships.Namespaces;
 import org.docx4j.wml.Document;
 import org.docx4j.wml.SectPr;
 import org.docx4j.wml.Styles;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 
@@ -98,7 +96,7 @@ public class WordprocessingMLPackage extends OpcPackage {
 	 * word/document.xml
 	 */
 	
-	protected static Logger log = Logger.getLogger(WordprocessingMLPackage.class);
+	protected static Logger log = LoggerFactory.getLogger(WordprocessingMLPackage.class);
 		
 	
 	// Main document
@@ -170,41 +168,6 @@ public class WordprocessingMLPackage extends OpcPackage {
 	public static WordprocessingMLPackage load(InputStream is) throws Docx4JException {
 		
 		return (WordprocessingMLPackage)OpcPackage.load(is);
-	}
-	
-	/**
-	 * Convenience method to save a WordprocessingMLPackage
-	 * to a File.
-     *
-	 * @param docxFile
-	 *            The docx file 
-	 */	
-	public void save(java.io.File docxFile) throws Docx4JException {
-
-		if (docxFile.getName().endsWith(".xml")) {
-			
-		   	// Create a org.docx4j.wml.Package object
-			FlatOpcXmlCreator worker = new FlatOpcXmlCreator(this);
-			org.docx4j.xmlPackage.Package pkg = worker.get();
-	    	
-	    	// Now marshall it
-			JAXBContext jc = Context.jcXmlPackage;
-			try {
-				Marshaller marshaller=jc.createMarshaller();
-				
-				marshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
-				NamespacePrefixMapperUtils.setProperty(marshaller, 
-						NamespacePrefixMapperUtils.getPrefixMapper());			
-				
-				marshaller.marshal(pkg, new FileOutputStream(docxFile));
-			} catch (Exception e) {
-				throw new Docx4JException("Error saving Flat OPC XML", e);
-			}	
-			return;
-		}
-			
-		SaveToZipFile saver = new SaveToZipFile(this); 
-		saver.save(docxFile);
 	}
 	
 	
@@ -298,7 +261,7 @@ public class WordprocessingMLPackage extends OpcPackage {
 //		} else {
 //			this.getMainDocumentPart().getStyleDefinitionsPart().setJaxbElement(wmlStyles);
 //		}
-		this.getMainDocumentPart().getStyleDefinitionsPart().setJaxbElement(
+		this.getMainDocumentPart().getStyleDefinitionsPart(true).setJaxbElement(
 				((JaxbXmlPart<Styles>) tmpStylesPart).getJaxbElement() );
     	
     }
@@ -333,7 +296,37 @@ public class WordprocessingMLPackage extends OpcPackage {
  */
 
     public void setFontMapper(Mapper fm) throws Exception {
+    	setFontMapper( fm,  true);
+    }
+    
+    /**
+     * @param fm
+     * @param populate
+     * @throws Exception
+     * 
+     * @since 3.0.1
+     */
+    public void setFontMapper(Mapper fm, boolean populate) throws Exception {
     	log.debug("setFontMapper invoked");
+    	
+    	/* The two font mappers included in docx4j (IdentityPlusMapper
+    	 * and BestMatchingMapper), both populate physical fonts statically
+    	 * when they are constructed.
+    	 * 
+    	 * So by now, we know what physical fonts exist on the 
+    	 * system.
+    	 * 
+    	 * A mapper is per document.
+    	 * 
+    	 * This method:
+    	 * - adds fonts embedded in the docx to the mapper
+    	 * - optionally, populates the mapper for fonts actually used in the docx,  
+    	 * 
+    	 * Since an embedded font is document specific, it must NOT be added to
+    	 * PhysicalFonts! It is ok to have a PhysicalFont object representing it,
+    	 * but that should be stored in the document specific mapper object.   
+    	 */
+    	
     	if (fm == null) {
     		throw new IllegalArgumentException("Font Substituter cannot be null.");
     	}
@@ -343,25 +336,25 @@ public class WordprocessingMLPackage extends OpcPackage {
 		// 1.  Get a list of all the fonts in the document
 		Set<String> fontsInUse = this.getMainDocumentPart().fontsInUse();
 		
-		//if ( fm instanceof BestMatchingMapper ) {
-		if ( fm.getClass().getName().equals("org.docx4j.fonts.BestMatchingMapper") ) {
-			
+//		if ( fm.getClass().getName().equals("org.docx4j.fonts.BestMatchingMapper") ) {
 			
 			// 2.  For each font, find the closest match on the system (use OO's VCL.xcu to do this)
 			//     - do this in a general way, since docx4all needs this as well to display fonts		
-			FontTablePart fontTablePart= this.getMainDocumentPart().getFontTablePart();	
-			
+			FontTablePart fontTablePart= this.getMainDocumentPart().getFontTablePart();				
 			if (fontTablePart==null) {
 				log.warn("FontTable missing; creating default part.");
 				fontTablePart= new org.docx4j.openpackaging.parts.WordprocessingML.FontTablePart();
 				fontTablePart.unmarshalDefaultFonts();
-				fontTablePart.processEmbeddings();
 			}
 			
+			fontTablePart.processEmbeddings(fontMapper);
+			
 			fonts = (org.docx4j.wml.Fonts)fontTablePart.getJaxbElement();
-		}
+//		}
 		
-		fontMapper.populateFontMappings(fontsInUse, fonts);    	
+		if (populate) {
+			fontMapper.populateFontMappings(fontsInUse, fonts);
+		}
     	
     }
 
@@ -382,25 +375,6 @@ public class WordprocessingMLPackage extends OpcPackage {
 	private Mapper fontMapper;
 	
 	
-	private String defaultFont;
-	public String getDefaultFont() {
-		
-		if (defaultFont==null) {
-			defaultFont = mainDoc.getPropertyResolver().getDefaultFont();
-			log.debug("Identified default font: " + defaultFont);
-		}
-		return defaultFont;		
-	}
-    	
-	private String defaultMajorFont;
-	public String getDefaultMajorFont() {
-		
-		if (defaultMajorFont==null) {
-			defaultMajorFont = mainDoc.getPropertyResolver().getDefaultMajorFontLatin();
-			log.debug("Identified default major font: " + defaultMajorFont);
-		}
-		return defaultMajorFont;		
-	}
 
 	/**
 	 * Creates a WordprocessingMLPackage, using default page size and orientation.
@@ -465,7 +439,7 @@ public class WordprocessingMLPackage extends OpcPackage {
 		} catch (Exception e) {
 			// TODO: handle exception
 			//e.printStackTrace();	
-			log.error(e);
+			log.error(e.getMessage(), e);
 		}
 		
 		// Metadata: docx4j 2.7.1 can populate some of this from docx4j.properties
@@ -479,13 +453,26 @@ public class WordprocessingMLPackage extends OpcPackage {
 		DocPropsExtendedPart app = new DocPropsExtendedPart();
 		org.docx4j.docProps.extended.ObjectFactory extFactory = new org.docx4j.docProps.extended.ObjectFactory();
 		app.setJaxbElement(extFactory.createProperties() );
-		wmlPack.addTargetPart(app);		
-		
+		wmlPack.addTargetPart(app);	
+				
 		// Return the new package
 		return wmlPack;
 		
 	}
 	
+	
+	@Override
+	protected void finalize() throws Throwable {
+		try {
+			FontTablePart ftp = this.getMainDocumentPart().getFontTablePart();
+			if (ftp != null) {
+				ftp.deleteEmbeddedFontTempFiles();
+			}
+		} finally {
+			super.finalize();
+		}
+		
+	}
 
 	public static class FilterSettings {
 		

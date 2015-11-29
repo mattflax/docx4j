@@ -15,7 +15,6 @@ import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.stream.StreamSource;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.log4j.Logger;
 import org.docx4j.XmlUtils;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.exceptions.InvalidFormatException;
@@ -24,7 +23,8 @@ import org.docx4j.openpackaging.parts.WordprocessingML.FontTablePart;
 import org.docx4j.openpackaging.parts.WordprocessingML.MainDocumentPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.NumberingDefinitionsPart;
 import org.docx4j.wml.Numbering.AbstractNum;
-import org.docx4j.wml.Numbering.AbstractNum.MultiLevelType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This is a simple proof of concept of
@@ -35,7 +35,7 @@ import org.docx4j.wml.Numbering.AbstractNum.MultiLevelType;
  */
 public class Word2003XmlConverter {
 	
-	private static Logger log = Logger.getLogger(Word2003XmlConverter.class);
+	private static Logger log = LoggerFactory.getLogger(Word2003XmlConverter.class);
 	
 	static Templates xslt;	
 	
@@ -52,18 +52,20 @@ public class Word2003XmlConverter {
 			
 		} catch (IOException e) {
 			e.printStackTrace();
-			log.error(e);
+			log.error("Couldn't setup 2003-import.xslt", e);
 		} catch (TransformerConfigurationException e) {
 			e.printStackTrace();
-			log.error(e);
+			log.error("Couldn't setup 2003-import.xslt", e);
 		}
 	}	
 
 	public Word2003XmlConverter(Source source) throws JAXBException, Docx4JException {
 		
 		// Use 2003-import.xsl to convert to a Transition03To06 object
+		java.lang.ClassLoader classLoader = Word2003XmlConverter.class.getClassLoader();		
+		
 		JAXBResult result = new JAXBResult(
-		         JAXBContext.newInstance("org.docx4j.convert.in.word2003xml") );
+		         JAXBContext.newInstance("org.docx4j.convert.in.word2003xml", classLoader) );
 		XmlUtils.transform(source, xslt, null, result);
 		
 		// set the unmarshalled content tree
@@ -100,7 +102,7 @@ public class Word2003XmlConverter {
 		if (!mainDocOnly) {
 		
 			// Styles
-			mdp.getStyleDefinitionsPart().setJaxbElement(transitionContainer.getStyles());
+			mdp.getStyleDefinitionsPart(true).setJaxbElement(transitionContainer.getStyles());
 			
 			// Numbering
 			try {

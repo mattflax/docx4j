@@ -21,10 +21,8 @@ package org.docx4j.convert.out.common.writer;
 
 import java.io.StringReader;
 
-import javax.xml.parsers.DocumentBuilderFactory;
-
-import org.apache.log4j.Logger;
 import org.docx4j.XmlUtils;
+import org.docx4j.convert.out.common.AbstractConversionContext;
 import org.w3c.dom.Document;
 import org.w3c.dom.DocumentFragment;
 import org.w3c.dom.Node;
@@ -39,22 +37,20 @@ import org.xml.sax.InputSource;
  *
  */
 public abstract class AbstractMessageWriter {
-
-	protected static Logger log = Logger.getLogger(AbstractMessageWriter.class);
 	
-	public DocumentFragment notImplemented(NodeIterator nodes, String message) {
+	public DocumentFragment notImplemented(AbstractConversionContext context, NodeIterator nodes, String message) {
 
 		Node n = nodes.nextNode();
-		log.warn("NOT IMPLEMENTED: support for "+ n.getNodeName() + "; " + message);
+		context.getLog().warn("NOT IMPLEMENTED: support for "+ n.getNodeName() + "; " + message);
 		
-		if (log.isDebugEnabled() ) {
+		if (context.getLog().isDebugEnabled() ) {
 			
 			if (message==null) message="";
 			
-			log.debug( XmlUtils.w3CDomNodeToString(n)  );
+			context.getLog().debug( XmlUtils.w3CDomNodeToString(n)  );
 
 			// Return something which will show up in the HTML
-			return message("NOT IMPLEMENTED: support for " + n.getNodeName() + " - " + message);
+			return message(context, "NOT IMPLEMENTED: support for " + n.getNodeName() + " - " + message);
 		} else {
 			
 			// Put it in a comment node instead?
@@ -63,27 +59,23 @@ public abstract class AbstractMessageWriter {
 		}
 	}
 	
-	public DocumentFragment message(String message) {
+	public DocumentFragment message(AbstractConversionContext context, String message) {
 		
-		if (!log.isDebugEnabled()) return null;
+		if (!context.getLog().isDebugEnabled()) return null;
 
 		String documentFragment = getOutputPrefix() 
 			+ message
 			+ getOutputSuffix();  
 		
-		log.debug(documentFragment);
+		context.getLog().debug(documentFragment);
 
-		javax.xml.parsers.DocumentBuilderFactory dbf = DocumentBuilderFactory
-				.newInstance();
-		dbf.setNamespaceAware(true);
 		StringReader reader = new StringReader(documentFragment);
 		InputSource inputSource = new InputSource(reader);
 		Document doc = null;
 		try {
-			doc = dbf.newDocumentBuilder().parse(inputSource);
+			doc = XmlUtils.getNewDocumentBuilder().parse(inputSource);
 		} catch (Exception e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			context.getLog().error(e.getMessage(),e);
 		}
 		reader.close();
 

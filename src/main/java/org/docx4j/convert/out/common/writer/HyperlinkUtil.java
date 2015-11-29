@@ -1,11 +1,30 @@
+/*
+   Licensed to Plutext Pty Ltd under one or more contributor license agreements.  
+   
+ *  This file is part of docx4j.
+
+    docx4j is licensed under the Apache License, Version 2.0 (the "License"); 
+    you may not use this file except in compliance with the License. 
+
+    You may obtain a copy of the License at 
+
+        http://www.apache.org/licenses/LICENSE-2.0 
+
+    Unless required by applicable law or agreed to in writing, software 
+    distributed under the License is distributed on an "AS IS" BASIS, 
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+    See the License for the specific language governing permissions and 
+    limitations under the License.
+
+ */
 package org.docx4j.convert.out.common.writer;
 
 import javax.xml.transform.TransformerException;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.docx4j.XmlUtils;
-import org.docx4j.convert.out.AbstractWmlConversionContext;
-import org.docx4j.model.fields.HyperlinkModel;
+import org.docx4j.convert.out.common.AbstractWmlConversionContext;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -16,11 +35,11 @@ import org.w3c.dom.Node;
  *
  */
 public class HyperlinkUtil {
-	private final static Logger log = Logger.getLogger(HyperlinkUtil.class);
+	private final static Logger log = LoggerFactory.getLogger(HyperlinkUtil.class);
 	public static final int HTML_OUTPUT = 1;
 	public static final int FO_OUTPUT = 2;
 
-	public static Node toNode(int outputType, AbstractWmlConversionContext context, HyperlinkModel model, Node content, Document doc) throws TransformerException {
+	public static Node toNode(int outputType, AbstractWmlConversionContext context, AbstractHyperlinkWriterModel model, Node content, Document doc) throws TransformerException {
 	Node ret = content;
 		try {
 			context.handleHyperlink(model); // extension point: you can pass your own handler in settings
@@ -45,7 +64,7 @@ public class HyperlinkUtil {
 		return ret;
 	}
 
-	private static Node toFoNode(AbstractWmlConversionContext context, HyperlinkModel model, Node content, Document doc) {
+	private static Node toFoNode(AbstractWmlConversionContext context, AbstractHyperlinkWriterModel model, Node content, Document doc) {
 		
 		Element ret = doc.createElementNS("http://www.w3.org/1999/XSL/Format", "fo:basic-link");
 		String internalTarget = model.getInternalTarget();
@@ -75,7 +94,7 @@ public class HyperlinkUtil {
 		return ret;
 	}
 
-	private static Node toHtmlNode(AbstractWmlConversionContext context, HyperlinkModel model, Node content, Document doc) {
+	private static Node toHtmlNode(AbstractWmlConversionContext context, AbstractHyperlinkWriterModel model, Node content, Document doc) {
 		
 		Element ret = doc.createElement("a");
 		String internalTarget = model.getInternalTarget();

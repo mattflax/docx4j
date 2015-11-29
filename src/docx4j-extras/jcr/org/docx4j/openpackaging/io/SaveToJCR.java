@@ -44,8 +44,10 @@ import javax.xml.parsers.ParserConfigurationException;
 
 //import org.apache.jackrabbit.core.TransientRepository;  // Testing only
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import org.docx4j.XmlUtils;
 import org.docx4j.JcrNodeMapper.NodeMapper;
 import org.docx4j.jaxb.Context;
 import org.docx4j.openpackaging.URIHelper;
@@ -95,7 +97,7 @@ public class SaveToJCR {
 	 *
 	 */	
 	
-	private static Logger log = Logger.getLogger(SaveToJCR.class);		
+	private static Logger log = LoggerFactory.getLogger(SaveToJCR.class);		
 
 	
 	public SaveToJCR(OpcPackage p, NodeMapper nodeMapper, Session jcrSession) {
@@ -141,9 +143,7 @@ public class SaveToJCR {
 
 			// 3. Get [Content_Types].xml
 			ContentTypeManager ctm = p.getContentTypeManager();
-			javax.xml.parsers.DocumentBuilderFactory dbf = javax.xml.parsers.DocumentBuilderFactory.newInstance();
-			dbf.setNamespaceAware(true);
-			org.w3c.dom.Document w3cDoc = dbf.newDocumentBuilder().newDocument();
+			org.w3c.dom.Document w3cDoc = XmlUtils.getNewDocumentBuilder().newDocument();
 			
 			ctm.marshal( w3cDoc );
 			
@@ -287,9 +287,7 @@ public class SaveToJCR {
 		if (part instanceof org.docx4j.openpackaging.parts.JaxbXmlPart) {
 
 			try {
-				javax.xml.parsers.DocumentBuilderFactory dbf = javax.xml.parsers.DocumentBuilderFactory.newInstance();
-				dbf.setNamespaceAware(true);
-				w3cDoc = dbf.newDocumentBuilder().newDocument();
+				w3cDoc = XmlUtils.getNewDocumentBuilder().newDocument();
 				
 				((org.docx4j.openpackaging.parts.JaxbXmlPart)part).marshal( w3cDoc );
 			} catch (Exception e) {

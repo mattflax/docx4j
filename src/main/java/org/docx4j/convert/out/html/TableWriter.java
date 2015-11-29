@@ -1,20 +1,39 @@
+/*
+   Licensed to Plutext Pty Ltd under one or more contributor license agreements.  
+   
+ *  This file is part of docx4j.
+
+    docx4j is licensed under the Apache License, Version 2.0 (the "License"); 
+    you may not use this file except in compliance with the License. 
+
+    You may obtain a copy of the License at 
+
+        http://www.apache.org/licenses/LICENSE-2.0 
+
+    Unless required by applicable law or agreed to in writing, software 
+    distributed under the License is distributed on an "AS IS" BASIS, 
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+    See the License for the specific language governing permissions and 
+    limitations under the License.
+
+ */
 package org.docx4j.convert.out.html;
 
 import java.util.List;
 
-import org.apache.log4j.Logger;
 import org.docx4j.UnitsOfMeasurement;
-import org.docx4j.convert.out.AbstractWmlConversionContext;
+import org.docx4j.convert.out.common.AbstractWmlConversionContext;
 import org.docx4j.convert.out.common.writer.AbstractTableWriter;
-import org.docx4j.model.TransformState;
+import org.docx4j.convert.out.common.writer.AbstractTableWriterModel;
+import org.docx4j.convert.out.common.writer.AbstractTableWriterModelCell;
 import org.docx4j.model.properties.Property;
-import org.docx4j.model.table.Cell;
-import org.docx4j.model.table.TableModel;
+import org.docx4j.model.styles.StyleTree;
+import org.docx4j.model.styles.StyleTree.AugmentedStyle;
+import org.docx4j.model.styles.Tree;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
-import org.docx4j.model.styles.StyleTree;
-import org.docx4j.model.styles.Tree;
-import org.docx4j.model.styles.StyleTree.AugmentedStyle;
 
 /*
  *  Write a w:tbl as an HTML <table>.
@@ -22,7 +41,7 @@ import org.docx4j.model.styles.StyleTree.AugmentedStyle;
  *  
 */
 public class TableWriter extends AbstractTableWriter {
-	protected final static Logger logger = Logger.getLogger(TableWriter.class);
+	protected final static Logger log = LoggerFactory.getLogger(TableWriter.class);
 	
 	protected final static String TABLE_BORDER_MODEL = "border-collapse";
 	protected final static String TABLE_INDENT = "margin-left"; 
@@ -31,10 +50,10 @@ public class TableWriter extends AbstractTableWriter {
   		return "docx4j_tbl_" + idx;
 	}
 	
-	@Override
-	protected Logger getLog() {
-		return logger;
-	}
+//	@Override
+//	protected Logger getLog() {
+//		return logger;
+//	}
 	
   	@Override
 	protected Element createNode(Document doc, int nodeType) {
@@ -77,7 +96,7 @@ public class TableWriter extends AbstractTableWriter {
 	}
 	
 	@Override
-	protected void applyTableCustomAttributes(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Element tableRoot) {
+	protected void applyTableCustomAttributes(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, Element tableRoot) {
 	int cellSpacing = ((table.getEffectiveTableStyle().getTblPr() != null) &&
 			   (table.getEffectiveTableStyle().getTblPr().getTblCellSpacing() != null) &&
 			   (table.getEffectiveTableStyle().getTblPr().getTblCellSpacing().getW() != null) ?
@@ -85,7 +104,7 @@ public class TableWriter extends AbstractTableWriter {
 	
 		// Set @class
 	    if (table.getStyleId()==null) {
-	    	getLog().debug("table has no w:tblStyle?");
+	    	log.debug("table has no w:tblStyle?");
 	    } else {
 			StyleTree styleTree = context.getWmlPackage().getMainDocumentPart().getStyleTree();	
 			Tree<AugmentedStyle> tTree = styleTree.getTableStylesTree();		
@@ -97,6 +116,7 @@ public class TableWriter extends AbstractTableWriter {
 	    
 	    tableRoot.setAttribute("id", 
 	    		getId(((TableModelTransformState)transformState).getIdx()) );
+	    ((TableModelTransformState)transformState).incrementIdx();
 
 		// border model
 		// Handle cellSpacing as in xsl-fo to have a consistent look.
@@ -115,6 +135,18 @@ public class TableWriter extends AbstractTableWriter {
 			HtmlCssHelper.appendStyle(tableRoot, 
 					Property.composeCss("width", UnitsOfMeasurement.twipToBest(table.getTableWidth())));
 		}
+		
+		// Hebrew: columns appear in reverse order
+		// see http://webapp.docx4java.org/OnlineDemo/ecma376/WordML/bidiVisual.html
+		// @since 3.0.2
+		if ((table.getEffectiveTableStyle().getTblPr() != null) 
+				&& (table.getEffectiveTableStyle().getTblPr().getBidiVisual()!=null) 
+				&& (table.getEffectiveTableStyle().getTblPr().getBidiVisual().isVal()) ) {
+
+			HtmlCssHelper.appendStyle(tableRoot, Property.composeCss("direction", "rtl"));
+			
+		}
+		
 	}
 
 	/**
@@ -131,7 +163,7 @@ public class TableWriter extends AbstractTableWriter {
 	}
 
 	@Override
-	protected void applyColumnCustomAttributes(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Element column, int columnIndex, int columnWidth) {
+	protected void applyColumnCustomAttributes(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, Element column, int columnIndex, int columnWidth) {
 		if ((table.getTableWidth() > 0) && (columnWidth > -1)) {
 			HtmlCssHelper.appendStyle(column, Property.composeCss("width", 
 					UnitsOfMeasurement.format2DP.format((100f * columnWidth)/table.getTableWidth()) + "%"));
@@ -139,7 +171,7 @@ public class TableWriter extends AbstractTableWriter {
 	}
   	
   	@Override
-	protected void applyTableCellCustomAttributes(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Cell tableCell, Element cellNode, boolean isHeader, boolean isDummyCell) {
+	protected void applyTableCellCustomAttributes(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, AbstractTableWriterModelCell tableCell, Element cellNode, boolean isHeader, boolean isDummyCell) {
   		if (isDummyCell) {
   			HtmlCssHelper.appendStyle(cellNode, Property.composeCss("border", "none"));
   			HtmlCssHelper.appendStyle(cellNode, Property.composeCss("background-color:", "transparent"));

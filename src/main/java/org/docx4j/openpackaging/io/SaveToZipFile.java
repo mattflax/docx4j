@@ -32,14 +32,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
 import javax.xml.bind.Marshaller;
-import javax.xml.bind.PropertyException;
-import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
-import org.apache.log4j.Logger;
 import org.docx4j.Docx4jProperties;
 import org.docx4j.XmlUtils;
 import org.docx4j.convert.out.flatOpcXml.FlatOpcXmlCreator;
@@ -59,17 +55,24 @@ import org.docx4j.openpackaging.parts.WordprocessingML.BinaryPart;
 import org.docx4j.openpackaging.parts.relationships.Namespaces;
 import org.docx4j.openpackaging.parts.relationships.RelationshipsPart;
 import org.docx4j.relationships.Relationship;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 
 
 /**
  * Save a Package object to a Zip file or output stream
+ * 
+ * Use org.docx4j.openpackaging.io3.Save instead, also 
+ * available via Docx4J facade (since 3.0.2).
+ * 
  * @author jharrop
  *
  */
+@Deprecated
 public class SaveToZipFile {
 	
-	private static Logger log = Logger.getLogger(SaveToZipFile.class);				
+	private static Logger log = LoggerFactory.getLogger(SaveToZipFile.class);				
 	
 	public SaveToZipFile(OpcPackage p) {
 		
@@ -99,7 +102,7 @@ public class SaveToZipFile {
 
 	/* Save a Package as a Zip file in the file system */
 	public boolean save(java.io.File docxFile) throws Docx4JException  {
-		log.info("Saving to " +  docxFile.getPath() );		
+		log.info("Saving to" +  docxFile.getPath() );		
 		try {
 			if (docxFile.getPath().toLowerCase().endsWith(".xml") ) {
 				return saveFlatOPC(new FileOutputStream(docxFile));
@@ -300,7 +303,7 @@ public class SaveToZipFile {
 		
 		} catch (Exception e) {
 			e.printStackTrace();
-			log.error(e);
+			log.error(e.getMessage(), e);
 			throw new Docx4JException("Problem saving part " + zipEntryName, e);
 		} 
 		
@@ -375,7 +378,9 @@ public class SaveToZipFile {
 						log.debug(part.getClass().getName() );
 					}
 
-					if (!part.getPackage().equals(p)) {
+					if (part.getPackage()==null) {
+						log.warn("Packae is not set on Part " + resolvedPartUri);
+					} else if (!part.getPackage().equals(p)) {
 						log.warn("Part " + resolvedPartUri + " is attached to some other package");
 					}
 					
@@ -450,13 +455,7 @@ public class SaveToZipFile {
 		try {
 	        // Add ZIP entry to output stream.
 	        out.putNextEntry(new ZipEntry(resolvedPartUri));
-	        	        
-            java.nio.ByteBuffer bb = ((BinaryPart)part).getBuffer();
-            byte[] bytes = null;
-            bytes = new byte[bb.limit()];
-            bb.get(bytes);	        
-	        
-	        out.write( bytes );
+	        out.write( ((BinaryPart)part).getBytes() );
 
 			// Complete the entry
 	        out.closeEntry();

@@ -1,22 +1,44 @@
+/*
+   Licensed to Plutext Pty Ltd under one or more contributor license agreements.  
+   
+ *  This file is part of docx4j.
+
+    docx4j is licensed under the Apache License, Version 2.0 (the "License"); 
+    you may not use this file except in compliance with the License. 
+
+    You may obtain a copy of the License at 
+
+        http://www.apache.org/licenses/LICENSE-2.0 
+
+    Unless required by applicable law or agreed to in writing, software 
+    distributed under the License is distributed on an "AS IS" BASIS, 
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+    See the License for the specific language governing permissions and 
+    limitations under the License.
+
+ */
 package org.docx4j.convert.out.common.preprocess;
 
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.docx4j.XmlUtils;
 import org.docx4j.model.datastorage.CustomXmlDataStorage;
 import org.docx4j.openpackaging.Base;
 import org.docx4j.openpackaging.contenttype.ContentType;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.packages.OpcPackage;
+import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.CustomXmlDataStoragePart;
 import org.docx4j.openpackaging.parts.JaxbXmlPart;
 import org.docx4j.openpackaging.parts.Part;
 import org.docx4j.openpackaging.parts.PartName;
 import org.docx4j.openpackaging.parts.XmlPart;
 import org.docx4j.openpackaging.parts.WordprocessingML.BinaryPart;
+import org.docx4j.openpackaging.parts.WordprocessingML.MainDocumentPart;
 import org.docx4j.openpackaging.parts.relationships.Namespaces;
 import org.docx4j.openpackaging.parts.relationships.RelationshipsPart;
 import org.docx4j.relationships.Relationship;
@@ -27,50 +49,81 @@ import org.w3c.dom.Document;
  * as they may have some references to other parts. The data in the parts is 
  * only copied if the relationship type of the part is contained in the passed
  * relationshipTypes otherwise the new part contains a reference to the data 
- * of the old part.   
+ * of the old part.<br>
+ * If the passed relationship types is null, then it will do a complete deep copy.
+ * This is probably faster than storing and reading the document but it is restricted 
+ * to Parts of the types: BinaryPart, JaxbXmlPart, CustomXmlDataStoragePart, XmlPart.<br>
+ * If the passed relationship types is empty, then the passed Package is returned.  
  * 
  */
 public class PartialDeepCopy {
 	
-	protected static Logger log = Logger.getLogger(PartialDeepCopy.class);
+	protected static Logger log = LoggerFactory.getLogger(PartialDeepCopy.class);
 	
 	
 	public static OpcPackage process(OpcPackage opcPackage, Set<String> relationshipTypes) throws Docx4JException {
-	OpcPackage ret = null;
-	RelationshipsPart relPart = null;
-		if (relationshipTypes == null) {
-			throw new IllegalArgumentException("relationshipTypes is null");
-		}
+		
+		OpcPackage ret = null;
+		RelationshipsPart relPart = null;
 		if (opcPackage != null) {
-			if (relationshipTypes.isEmpty()) {
+			if ((relationshipTypes != null) && (relationshipTypes.isEmpty())) {
 				ret = opcPackage;
 			}
 			else {
 				ret = createPackage(opcPackage);
+				
+				if (ret==null) {
+					log.error("createPackage returned null!");
+				}
+				
+				
 				deepCopyRelationships(ret, opcPackage, ret, relationshipTypes);
+				
+				// Copy the font mappings
+				if (opcPackage instanceof WordprocessingMLPackage) {
+					
+//					// First need shortcut to MDP
+//					// .. get its name
+//					PartName mdpName = ((WordprocessingMLPackage)opcPackage).getMainDocumentPart().getPartName();
+//					// .. get the part
+//					Part mdp = ((WordprocessingMLPackage)ret).getParts().get(mdpName);
+//					// .. set the shortcut
+//					ret.setPartShortcut(mdp, mdp.getRelationshipType());					
+					
+					try {
+						((WordprocessingMLPackage)ret).setFontMapper(
+								((WordprocessingMLPackage)opcPackage).getFontMapper(), false); //don't repopulate, since we want to preserve existing mappings
+					} catch (Exception e) {
+						// shouldn't happen
+						log.error(e.getMessage(),e);
+						throw new Docx4JException("Error setting font mapper on copy", e);
+					}
+				}
+				
 			}
 		}
 		return ret;
 	}
 
 	protected static OpcPackage createPackage(OpcPackage opcPackage) throws Docx4JException {
-	OpcPackage ret = null;
+		
+		OpcPackage ret = null;
 		try {
 			ret = opcPackage.getClass().newInstance();
 		} catch (InstantiationException e) {
-			throw new Docx4JException("InstantiationException dupplicating package", e);
+			throw new Docx4JException("InstantiationException duplicating package", e);
 		} catch (IllegalAccessException e) {
-			throw new Docx4JException("IllegalAccessException dupplicating package", e);
+			throw new Docx4JException("IllegalAccessException duplicating package", e);
 		}
 		
 //		contentType
 		ret.setContentType(new ContentType(opcPackage.getContentType()));
 //		partName
-		ret.partName = opcPackage.partName;
+		ret.setPartName(opcPackage.getPartName());
 //		relationships
 		//is done in an another method
 //		userData
-		ret.setUserData(opcPackage.getUserData());
+//		ret.setUserData(opcPackage.getUserData());
 //		contentTypeManager
 		ret.setContentTypeManager(opcPackage.getContentTypeManager());
 //		customXmlDataStorageParts
@@ -81,6 +134,8 @@ public class PartialDeepCopy {
 		ret.setPartShortcut(opcPackage.getDocPropsCustomPart(), Namespaces.PROPERTIES_CUSTOM);
 //		docPropsExtendedPart
 		ret.setPartShortcut(opcPackage.getDocPropsExtendedPart(), Namespaces.PROPERTIES_EXTENDED);
+		
+		
 //		externalResources
 		ret.getExternalResources().putAll(opcPackage.getExternalResources());
 //		handled
@@ -88,7 +143,8 @@ public class PartialDeepCopy {
 //		parts
 		//is done in an another method
 //		partStore
-		ret.setPartStore(opcPackage.getPartStore());
+		ret.setSourcePartStore(opcPackage.getSourcePartStore());
+				
 		return ret;
 	}
 
@@ -147,8 +203,9 @@ public class PartialDeepCopy {
 		if (ret == null) {
 			//
 			ret = copyPart(sourcePart, 
-						   opcPackage, 
-						   relationshipTypes.contains(sourcePart.getRelationshipType()));
+						   opcPackage, ((relationshipTypes == null) || 
+								        relationshipTypes.contains(sourcePart.getRelationshipType()))
+						   );
 			opcPackage.getParts().put(ret);
 			targetParent.setPartShortcut(ret, ret.getRelationshipType());
 		}
@@ -180,7 +237,7 @@ public class PartialDeepCopy {
 
 	protected static void deepCopyContent(Part source, Part destination) throws Docx4JException {
 		if (source instanceof BinaryPart) {
-			byte[] byteData = new byte[((BinaryPart)source).getBuffer().capacity()];
+			byte[] byteData = new byte[((BinaryPart)source).getBuffer().limit()]; // = remaining() when current pos = 0
 			((BinaryPart)source).getBuffer().get(byteData);
 			((BinaryPart)destination).setBinaryData(ByteBuffer.wrap(byteData));
 		}
@@ -188,6 +245,14 @@ public class PartialDeepCopy {
 			((JaxbXmlPart)destination).setJaxbElement(XmlUtils.deepCopy(((JaxbXmlPart)source).getJaxbElement(), 
 							((JaxbXmlPart)source).getJAXBContext()));
 			((JaxbXmlPart)destination).setJAXBContext(((JaxbXmlPart)source).getJAXBContext());
+			
+			if (log.isDebugEnabled()
+					&& (source instanceof MainDocumentPart)) {
+				log.debug("source: " + ((JaxbXmlPart)source).getXML());
+				log.debug("destination: " + ((JaxbXmlPart)destination).getXML());
+			}
+			
+			
 		}
 		else if (source instanceof CustomXmlDataStoragePart) {
 			CustomXmlDataStorage dataStorage = ((CustomXmlDataStoragePart)source).getData().factory();

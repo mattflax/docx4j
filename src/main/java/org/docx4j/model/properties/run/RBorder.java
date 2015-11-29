@@ -19,19 +19,19 @@
  */
 package org.docx4j.model.properties.run;
 
-import org.apache.log4j.Logger;
 import org.docx4j.UnitsOfMeasurement;
 import org.docx4j.dml.CTTextCharacterProperties;
-import org.docx4j.model.properties.Property;
 import org.docx4j.wml.CTBorder;
 import org.docx4j.wml.RPr;
 import org.docx4j.wml.STBorder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Element;
 import org.w3c.dom.css.CSSValue;
 
 public class RBorder extends AbstractRunProperty {
 	
-	protected static Logger log = Logger.getLogger(RBorder.class);		
+	protected static Logger log = LoggerFactory.getLogger(RBorder.class);		
 	
 	public static final String CSS_NAME_STYLE = "border-style"; 
 	public static final String CSS_NAME_WIDTH = "border-width"; 

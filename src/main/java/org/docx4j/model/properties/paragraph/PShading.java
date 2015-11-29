@@ -19,28 +19,21 @@
  */
 package org.docx4j.model.properties.paragraph;
 
-import org.apache.log4j.Logger;
+import java.lang.reflect.Method;
+
 import org.docx4j.UnitsOfMeasurement;
 import org.docx4j.jaxb.Context;
-import org.docx4j.model.properties.Property;
-import org.docx4j.org.xhtmlrenderer.css.parser.FSColor;
-import org.docx4j.org.xhtmlrenderer.css.parser.FSRGBColor;
-import org.docx4j.org.xhtmlrenderer.css.parser.PropertyValue;
 import org.docx4j.wml.CTShd;
-import org.docx4j.wml.CTVerticalJc;
-import org.docx4j.wml.Color;
 import org.docx4j.wml.PPr;
-import org.docx4j.wml.STShd;
-import org.docx4j.wml.STVerticalJc;
-import org.docx4j.wml.TcPr;
-import org.docx4j.wml.PPrBase.TextAlignment;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Element;
 import org.w3c.dom.css.CSSPrimitiveValue;
 import org.w3c.dom.css.CSSValue;
 
 public class PShading extends AbstractParagraphProperty {
 	
-	protected static Logger log = Logger.getLogger(PShading.class);		
+	protected static Logger log = LoggerFactory.getLogger(PShading.class);		
 	
 	public final static String CSS_NAME = "background-color"; 
 	public final static String FO_NAME  = "background-color"; 
@@ -75,19 +68,20 @@ public class PShading extends AbstractParagraphProperty {
                     .getFloatValue(ignored);
             fBlue = cssPrimitiveValue.getRGBColorValue().getBlue()
                     .getFloatValue(ignored);
+    		shd.setFill(UnitsOfMeasurement.rgbTripleToHex(fRed, fGreen, fBlue));
+    		
         } catch (UnsupportedOperationException e) {
-            if (!(cssPrimitiveValue instanceof PropertyValue))
-                throw e;
-            final FSColor fsColor = ((PropertyValue) cssPrimitiveValue)
-                    .getFSColor();
-            if (!(fsColor instanceof FSRGBColor))
-                throw e;
-            fRed = ((FSRGBColor) fsColor).getRed();
-            fGreen = ((FSRGBColor) fsColor).getGreen();
-            fBlue = ((FSRGBColor) fsColor).getBlue();
+        	
+		    try {
+		    	Class<?> xhtmlImporterClass = Class.forName("org.docx4j.convert.in.xhtml.FSColorToHexString");
+		        Method rgbToHexMethod = xhtmlImporterClass.getMethod("rgbToHex", CSSPrimitiveValue.class);
+		        shd.setFill((String)rgbToHexMethod.invoke(null, cssPrimitiveValue));
+		    } catch (Exception e2) {
+		        log.error("docx4j-XHTMLImport jar not found. Please add this to your classpath.");
+				log.error(e2.getMessage(), e2);
+				throw e; // same as before
+			}  
         }
-		
-		shd.setFill(UnitsOfMeasurement.rgbTripleToHex(fRed, fGreen, fBlue));
 
 		this.setObject( shd  );
 	}

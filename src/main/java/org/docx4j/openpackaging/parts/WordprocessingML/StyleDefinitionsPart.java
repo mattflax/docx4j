@@ -22,33 +22,36 @@ package org.docx4j.openpackaging.parts.WordprocessingML;
 
 import java.io.IOException;
 import java.math.BigInteger;
-
-import org.apache.log4j.Logger;
-import org.docx4j.XmlUtils;
-import org.docx4j.jaxb.Context;
-import org.docx4j.openpackaging.exceptions.Docx4JException;
-import org.docx4j.openpackaging.exceptions.InvalidFormatException;
-import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
-import org.docx4j.openpackaging.parts.JaxbXmlPart;
-import org.docx4j.openpackaging.parts.JaxbXmlPartXPathAware;
-import org.docx4j.openpackaging.parts.PartName;
-import org.docx4j.openpackaging.parts.relationships.Namespaces;
-import org.docx4j.wml.DocDefaults;
-import org.docx4j.wml.PPr;
-import org.docx4j.wml.PPrBase.Spacing;
-import org.docx4j.wml.RPr;
-import org.docx4j.wml.Style;
-import org.docx4j.wml.Styles;
-import org.docx4j.wml.Style.BasedOn;
+import java.util.List;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
 import javax.xml.bind.Unmarshaller;
 
+import org.docx4j.XmlUtils;
+import org.docx4j.jaxb.Context;
+import org.docx4j.model.styles.BrokenStyleRemediator;
+import org.docx4j.openpackaging.exceptions.Docx4JException;
+import org.docx4j.openpackaging.exceptions.InvalidFormatException;
+import org.docx4j.openpackaging.parts.JaxbXmlPartXPathAware;
+import org.docx4j.openpackaging.parts.PartName;
+import org.docx4j.openpackaging.parts.relationships.Namespaces;
+import org.docx4j.utils.ResourceUtils;
+import org.docx4j.wml.DocDefaults;
+import org.docx4j.wml.HpsMeasure;
+import org.docx4j.wml.PPr;
+import org.docx4j.wml.PPrBase.Spacing;
+import org.docx4j.wml.RPr;
+import org.docx4j.wml.Style;
+import org.docx4j.wml.Style.BasedOn;
+import org.docx4j.wml.Styles;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 	
-	private static Logger log = Logger.getLogger(StyleDefinitionsPart.class);		
+	private static Logger log = LoggerFactory.getLogger(StyleDefinitionsPart.class);		
 	
 	public StyleDefinitionsPart(PartName partName) throws InvalidFormatException {
 		super(partName);
@@ -74,6 +77,16 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 	
 	// private PropertyResolver propertyResolver;
 	
+	@Override
+	public void setJaxbElement(Styles jaxbElement) {
+		super.setJaxbElement(jaxbElement);
+		// Null out cached values which now point to unrelated objects
+		styleDocDefaults=null;
+	    defaultCharacterStyle = null;
+	    defaultParagraphStyle = null;
+	    defaultTableStyle = null;
+	    css=null;
+	}
 	
     
 //	@Override
@@ -120,7 +133,7 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 				//is = getResource("styles.xml");
 				
 				// Works in Eclipse - not absence of leading '/'
-				is = org.docx4j.utils.ResourceUtils.getResource(
+				is = ResourceUtils.getResourceViaProperty("docx4j.openpackaging.parts.WordprocessingML.StyleDefinitionsPart.DefaultStyles",
 						"org/docx4j/openpackaging/parts/WordprocessingML/styles.xml");
 				
 					// styles.xml defines a small subset of common styles
@@ -141,7 +154,7 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
     	
 		java.io.InputStream is = null;
 		try {
-			is = org.docx4j.utils.ResourceUtils.getResource(
+			is = ResourceUtils.getResourceViaProperty("docx4j.openpackaging.parts.WordprocessingML.StyleDefinitionsPart.KnownStyles",
 					"org/docx4j/openpackaging/parts/WordprocessingML/KnownStyles.xml");						
 			
 			JAXBContext jc = Context.jc;
@@ -164,6 +177,11 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 		
     }
 
+	/**
+	 * Returns a map of styles defined in docx4j's KnownStyles.xml
+	 * (not styles defined in your pkg)
+	 * @return
+	 */
 	public static java.util.Map<String, org.docx4j.wml.Style> getKnownStyles() {
 		if (knownStyles==null) {
 			initKnownStyles();
@@ -171,9 +189,11 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 		return knownStyles;
 	}
     
-	/*
-	 * Manufacture styles from the following, so they can be used as the 
-	 * roots of our style trees.
+	private Style styleDocDefaults;
+	
+	/**
+	 * Manufacture a paragraph style from the following, so it can be used as the 
+	 * root of our paragraph style tree.
 	 * 
 	 * 	<w:docDefaults>
 			<w:rPrDefault>
@@ -190,21 +210,60 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 				</w:pPr>
 			</w:pPrDefault>
 		</w:docDefaults>
+		
+		BEWARE: in a table, paragraph style ppr trumps table style ppr.
+		The effect of including w:docDefaults in the style hierarchy
+		is that they trump table style ppr, but they should not!
+		
+	 * There is no need for a doc defaults character style.
+	 * The reason for this is that Word seems to ignore Default Paragraph Style!
+	 * So the run formatting comes from paragraph style + explicit character style (if any),
+	 * plus direct formatting.
+		
 
 	 */
     public void createVirtualStylesForDocDefaults() throws Docx4JException {
     	
-    	Style pDefault = Context.getWmlObjectFactory().createStyle();
+    	if (styleDocDefaults!=null) return; // been done already
     	
     	String ROOT_NAME = "DocDefaults";
+
+    	// could be in docx which we saved and are now re-opening
+    	styleDocDefaults = getStyleById(this.getJaxbElement().getStyle(), ROOT_NAME);
+    	if (styleDocDefaults==null) {
+
+        	styleDocDefaults = Context.getWmlObjectFactory().createStyle();
+        	styleDocDefaults.setStyleId(ROOT_NAME);
+        	
+    		this.getJaxbElement().getStyle().add(styleDocDefaults);
+    		
+    	} else {
+    		
+    		log.debug("Found existing style named " + ROOT_NAME);
+    		log.debug(XmlUtils.marshaltoString(styleDocDefaults, true, true));
+    		
+        	// TODO: could be a name collision; some other app using that name :-(
+    		// We could check whether normal is based on it (see towards end of this method)
+    		
+    		if (styleDocDefaults.getRPr()!=null) {
+        		log.debug(".. reusing");
+    			return;
+    		} else {
+        		log.debug(".. but no rPr, so re-creating");    			
+    		}
+    	}
     	
-    	pDefault.setStyleId(ROOT_NAME);
-    	pDefault.setType("paragraph");
+    	styleDocDefaults.setType("paragraph");
+    	
+		org.docx4j.wml.Style.Name n = Context.getWmlObjectFactory().createStyleName();
+    	n.setVal(ROOT_NAME);
+    	styleDocDefaults.setName(n);
     			
 		// Initialise docDefaults		
 		DocDefaults docDefaults = this.getJaxbElement().getDocDefaults(); 		
 		
 		if (docDefaults == null) {
+			log.info("No DocDefaults present");
 			// The only way this can happen is if the
 			// styles definition part is missing the docDefaults element
 			// (these are present in docs created from Word, and
@@ -223,6 +282,7 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 		// Setup documentDefaultPPr
 		PPr documentDefaultPPr;
 		if (docDefaults.getPPrDefault() == null) {
+			log.info("No PPrDefault present");
 			try {
 				documentDefaultPPr = (PPr) XmlUtils
 						.unmarshalString(pPrDefaultsString);
@@ -251,9 +311,11 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 		// Setup documentDefaultRPr
 		RPr documentDefaultRPr;
 		if (docDefaults.getRPrDefault() == null) {
+			log.info("No RPrDefault present");
 			try {
 				documentDefaultRPr = (RPr) XmlUtils
 						.unmarshalString(rPrDefaultsString);
+					// that includes font size 10
 			} catch (JAXBException e) {
 				throw new Docx4JException("Problem unmarshalling "
 						+ rPrDefaultsString, e);
@@ -263,32 +325,48 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 			if (documentDefaultRPr==null) {
 				documentDefaultRPr = Context.getWmlObjectFactory().createRPr();
 			}
+			// If default font size is not specified, set it to match Word default when unspecified (ie 10)
+			// It is useful to have this explicitly, especially for XHTML Import
+//	        <w:sz w:val="20"/>
+//	        <w:szCs w:val="20"/>			
+			if (documentDefaultRPr.getSz()==null) {
+				HpsMeasure s10pt = Context.getWmlObjectFactory().createHpsMeasure();
+				s10pt.setVal(BigInteger.valueOf(20));
+				documentDefaultRPr.setSz(s10pt);
+			}
+			if (documentDefaultRPr.getSzCs()==null) {
+				HpsMeasure s10pt = Context.getWmlObjectFactory().createHpsMeasure();
+				s10pt.setVal(BigInteger.valueOf(20));
+				documentDefaultRPr.setSzCs(s10pt);
+			}
 		}
     	
-		pDefault.setPPr(documentDefaultPPr);
-		pDefault.setRPr(documentDefaultRPr);
+		styleDocDefaults.setPPr(documentDefaultPPr);
+		styleDocDefaults.setRPr(documentDefaultRPr);
 		
 		// Now point Normal at this
 		Style normal = getDefaultParagraphStyle();
 		if (normal==null) {
-			log.warn("No default paragraph style!!");
+			log.info("No default paragraph style!!");
 			normal = Context.getWmlObjectFactory().createStyle();
 			normal.setType("paragraph");
 			normal.setStyleId("Normal");
 			
-			org.docx4j.wml.Style.Name n = Context.getWmlObjectFactory().createStyleName();
+			n = Context.getWmlObjectFactory().createStyleName();
 			n.setVal("Normal");
 			normal.setName(n);
-			this.getJaxbElement().getStyle().add(normal);			
+			this.getJaxbElement().getStyle().add(normal);	
+			
+			normal.setDefault(Boolean.TRUE); // @since 3.2.0
 		}
 		
 		BasedOn based = Context.getWmlObjectFactory().createStyleBasedOn();
 		based.setVal(ROOT_NAME);		
 		normal.setBasedOn(based);
 		
-		// Finally, add it to styles
-		this.getJaxbElement().getStyle().add(pDefault);
-		log.debug("Added virtual style, id '" + pDefault.getStyleId() + "', name '"+ pDefault.getName() + "'");
+		log.debug("Set virtual style, id '" + styleDocDefaults.getStyleId() + "', name '"+ styleDocDefaults.getName().getVal() + "'");
+		
+		log.debug(XmlUtils.marshaltoString(styleDocDefaults, true, true));
 		
 		
     	
@@ -301,14 +379,31 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
      */
     public Style getStyleById(String id) {
     	
-		for ( org.docx4j.wml.Style s : this.getJaxbElement().getStyle() ) {				
-			if( s.getStyleId().equals(id) ) {
+		return getStyleById( this.getJaxbElement().getStyle(), id ); 				
+
+    }
+
+    /**
+     * @param id
+     * @return
+     * @since 3.0.1
+     */
+    private static Style getStyleById(List<Style> styles, String id) {
+    	
+		for ( org.docx4j.wml.Style s : styles ) {	
+			
+			if (s.getStyleId()==null) {
+				BrokenStyleRemediator.remediate(s);
+			}
+			
+			if( s.getStyleId()!=null
+					&& s.getStyleId().equals(id) ) {
 				return s;
 			}
 		}
     	return null;
     }
-
+    
     private Style defaultCharacterStyle;
     public Style getDefaultCharacterStyle() {
     	
@@ -332,7 +427,13 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
     private final static String DEFAULT_CHARACTER_STYLE_DEFAULT = "<w:style w:type=\"character\" w:default=\"1\" w:styleId=\"DefaultParagraphFont\" " + Namespaces.W_NAMESPACE_DECLARATION + "><w:name w:val=\"Default Paragraph Font\" /></w:style>";
     
     
+    
     private Style defaultParagraphStyle;
+    /**
+     * if this returns null; invoke createVirtualStylesForDocDefaults() @since 3.2.0 then try again
+     * 
+     * @return
+     */
     public Style getDefaultParagraphStyle() {
     	
     	if (defaultParagraphStyle==null) {
@@ -344,8 +445,9 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
     	if (defaultParagraphStyle==null) {
     		for ( org.docx4j.wml.Style s : this.getJaxbElement().getStyle() ) {				
     			if( s.getType().equals("paragraph")
+    					&& s.getName()!=null
     					&& s.getName().getVal().equals("Default") ) {
-    				log.info("Style with name " + s.getName().getVal() + ", id '" + s.getStyleId() + "' is default " + s.getType() + " style");
+    				log.debug("Style with name " + s.getName().getVal() + ", id '" + s.getStyleId() + "' is default " + s.getType() + " style");
     				defaultParagraphStyle=s;
     				break;
     			}
@@ -356,20 +458,34 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
     		for ( org.docx4j.wml.Style s : this.getJaxbElement().getStyle() ) {				
     			if( s.getType().equals("paragraph")
     					&& s.getStyleId().equals("style0") ) {
-    				log.info("Style with name " + s.getName().getVal() + ", id '" + s.getStyleId() + "' is default " + s.getType() + " style");
+    				log.debug("Style with name " + s.getName().getVal() + ", id '" + s.getStyleId() + "' is default " + s.getType() + " style");
     				defaultParagraphStyle=s;
     				break;
     			}
     		}    		
     	}
+    
     	
 		return defaultParagraphStyle;
     }
+    
+    private Style defaultTableStyle;
+    /**
+     * @since 3.0
+     */
+    public Style getDefaultTableStyle() {
+    	
+    	if (defaultTableStyle==null) {
+    		defaultTableStyle = getDefaultStyle("table");
+    	}
+		return defaultTableStyle;
+    }
+    
     private Style getDefaultStyle(String type) {
     	
 		for ( org.docx4j.wml.Style s : this.getJaxbElement().getStyle() ) {				
 			if( s.isDefault() && s.getType().equals(type)) {
-				log.info("Style with name " + s.getName().getVal() + ", id '" + s.getStyleId() + "' is default " + s.getType() + " style");
+				log.debug("Style with name " + s.getName().getVal() + ", id '" + s.getStyleId() + "' is default " + s.getType() + " style");
 				return s;
 			}
 		}
@@ -382,8 +498,8 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 	public final static String rPrDefaultsString = "<w:rPr" + wNamespaceDec + ">"
 		// Word 2007 still uses Times New Roman if there is no theme part, and we'd like to replicate that 
         // + "<w:rFonts w:asciiTheme=\"minorHAnsi\" w:eastAsiaTheme=\"minorHAnsi\" w:hAnsiTheme=\"minorHAnsi\" w:cstheme=\"minorBidi\" />"
-        + "<w:sz w:val=\"22\" />"
-        + "<w:szCs w:val=\"22\" />"
+        + "<w:sz w:val=\"20\" />"  // was 11 prior to 3.01, but Word default in absence of this setting is 10.
+        + "<w:szCs w:val=\"20\" />"
         + "<w:lang w:val=\"en-US\" w:eastAsia=\"en-US\" w:bidi=\"ar-SA\" />"
       + "</w:rPr>";
 	public final static String pPrDefaultsString = "<w:pPr" + wNamespaceDec + ">"
@@ -398,7 +514,56 @@ public final class StyleDefinitionsPart extends JaxbXmlPartXPathAware<Styles> {
 	    + "</w:pPrDefault>"
 	  + "</w:docDefaults>";
 	
-    
+
+	/**
+	 * It is convenient to have a CSS representation of styles,
+	 * and this part is a natural place to store it.
+	 * 
+	 * HtmlCssHelper contains a method createCssForStyles which
+	 * relies on StyleTree to generate CSS.  
+	 */
+	private String css;
+	public String getCss() {
+		return css;
+	}
+	public void setCss(String css) {
+		this.css = css;
+	}
+	
+	/**
+	 * For a run/character style return its linked paragraph style (if any),
+	 * or vice versa.
+	 * 
+	 * @param rStyleVal
+	 * @return
+	 */
+	public Style getLinkedStyle(String rStyleVal) {
+		
+		Style rStyle = getStyleById(rStyleVal);
+		if (rStyle==null) {
+			log.info("Couldn't find rStyle " + rStyleVal);
+			return null;
+		} else {
+			// We have a run level style.  Is there a linked pStyle?
+			Style.Link linkedStyle = rStyle.getLink();
+			if (linkedStyle==null) {
+				log.info("No linked style for rStyle " + rStyleVal);							
+				return null;
+			} else {
+				String pStyleVal = linkedStyle.getVal();
+				log.debug(rStyleVal + " is linked to style " + pStyleVal );
+				Style pStyle = getStyleById(pStyleVal);
+				
+				if (pStyle==null) {
+					log.info("Couldn't find linked pStyle " + pStyleVal 
+							+ " for rStyle " + rStyleVal);		
+				}
+				return pStyle;
+			}
+		}
+	}
+
+	
     
 //	public static void main(String[] args) throws Exception {
 //		

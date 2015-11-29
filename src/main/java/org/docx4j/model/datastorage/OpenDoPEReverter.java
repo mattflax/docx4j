@@ -21,15 +21,12 @@ package org.docx4j.model.datastorage;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 
 import javax.xml.bind.JAXBElement;
 
-import org.apache.log4j.Logger;
 import org.docx4j.TraversalUtil;
 import org.docx4j.TraversalUtil.CallbackImpl;
 import org.docx4j.XmlUtils;
@@ -51,6 +48,8 @@ import org.docx4j.wml.SdtPr;
 import org.docx4j.wml.Tag;
 import org.jvnet.jaxb2_commons.ppp.Child;
 import org.opendope.xpaths.Xpaths.Xpath;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 
@@ -78,7 +77,7 @@ import org.opendope.xpaths.Xpaths.Xpath;
  */
 public class OpenDoPEReverter {
 
-	private static Logger log = Logger.getLogger(OpenDoPEReverter.class);	
+	private static Logger log = LoggerFactory.getLogger(OpenDoPEReverter.class);	
 	
 	
 	private WordprocessingMLPackage openDopePkg;

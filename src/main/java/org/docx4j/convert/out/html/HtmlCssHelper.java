@@ -23,15 +23,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-import org.apache.log4j.Logger;
 import org.docx4j.model.properties.Property;
 import org.docx4j.model.properties.PropertyFactory;
 import org.docx4j.model.properties.paragraph.PBorderBottom;
 import org.docx4j.model.properties.paragraph.PBorderTop;
 import org.docx4j.model.properties.paragraph.PShading;
 import org.docx4j.model.styles.StyleTree;
-import org.docx4j.model.styles.Tree;
 import org.docx4j.model.styles.StyleTree.AugmentedStyle;
+import org.docx4j.model.styles.Tree;
 import org.docx4j.openpackaging.packages.OpcPackage;
 import org.docx4j.wml.CTShd;
 import org.docx4j.wml.CTTblPrBase;
@@ -41,6 +40,8 @@ import org.docx4j.wml.RPr;
 import org.docx4j.wml.Style;
 import org.docx4j.wml.TcPr;
 import org.docx4j.wml.TrPr;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Element;
 
 /** These is an utility class with some common functions for the 
@@ -49,12 +50,32 @@ import org.w3c.dom.Element;
  */
 public class HtmlCssHelper {
 
-	private static Logger log = Logger.getLogger(HtmlCssHelper.class);
+	private static Logger log = LoggerFactory.getLogger(HtmlCssHelper.class);
 	
 	//Temporary maps that get used in applyAttributes, they are kept here to be able to reuse it
 	private static ThreadLocal<Map<String, Property>> threadLocalTempMap = new ThreadLocal<Map<String, Property>>();
+		
+    public static void createDefaultCss(boolean hasDefaultHeader, boolean hasDefaultFooter, StringBuilder result) {
+    	//TODO: This method needs to be replaced with something similar to the LayoutMasterSetBuilder of fo
+		result.append("/*paged media */ div.header {display: none }");
+		result.append("div.footer {display: none } /*@media print { */");
+		if (hasDefaultHeader) {
+			result.append("div.header {display: block; position: running(header) }");
+		}
+		if (hasDefaultFooter) {
+			result.append("div.footer {display: block; position: running(footer) }");
+		}
+		
+		result.append("@page { size: A4; margin: 10%; @top-center {");
+		result.append("content: element(header) } @bottom-center {");
+		result.append("content: element(footer) } }");
+
+		result.append("/*element styles*/ .del  {text-decoration:line-through;color:red;} ");
+		result.append(".ins {text-decoration:none;background:#c0ffc0;padding:1px;}");
+    	
+    }
 	
-    public static void createCssForStyles(OpcPackage opcPackage, StyleTree styleTree, StringBuffer result) {
+    public static void createCssForStyles(OpcPackage opcPackage, StyleTree styleTree, StringBuilder result) {
 
 		// First iteration - table styles
 		result.append("\n /* TABLE STYLES */ \n");    	
@@ -72,7 +93,7 @@ public class HtmlCssHelper {
     		
     		Style s = n.getData().getStyle();
 
-    		result.append( "."+ s.getStyleId()  + " {display:table;" );
+    		result.append( "table."+ s.getStyleId()  + " {display:table;" );
     		
     		// TblPr
     		if (s.getTblPr()==null) {
@@ -134,7 +155,7 @@ public class HtmlCssHelper {
     		
     		Style s = n.getData().getStyle();
 
-    		result.append( "."+ s.getStyleId()  + " {display:block;" );
+    		result.append( "."+ s.getStyleId()  + " {display:block;" );  // not just p, also inherit on ul|ol
         	if (s.getPPr()==null) {
         		log.debug("null pPr for style " + s.getStyleId());
         	} else {
@@ -166,7 +187,7 @@ public class HtmlCssHelper {
     		
     		Style s = n.getData().getStyle();
 
-    		result.append( "."+ s.getStyleId()  + " {display:inline;" );
+    		result.append( "span."+ s.getStyleId()  + " {display:inline;" );
         	if (s.getRPr()==null) {
         		log.warn("! null rPr for character style " + s.getStyleId());
         	} else {
@@ -176,7 +197,7 @@ public class HtmlCssHelper {
     	}	
     }
     
-    protected static void createCss(CTTblPrBase  tblPr, StringBuffer result) {
+    protected static void createCss(CTTblPrBase  tblPr, StringBuilder result) {
     	
 		if (tblPr==null) {
 			return;
@@ -184,11 +205,11 @@ public class HtmlCssHelper {
     	
     	List<Property> properties = PropertyFactory.createProperties(tblPr);    	
     	for( Property p :  properties ) {
-    		result.append(p.getCssProperty());
+    		appendNonNull(result, p);
     	}    
     }
     
-    protected static void createCss(List<CTTblStylePr> tblStylePrList, StringBuffer result) {
+    protected static void createCss(List<CTTblStylePr> tblStylePrList, StringBuilder result) {
     	// STTblStyleOverrideType
     	
 		if (tblStylePrList==null) {
@@ -197,11 +218,11 @@ public class HtmlCssHelper {
     	
     	List<Property> properties = PropertyFactory.createProperties(tblStylePrList);    	
     	for( Property p :  properties ) {
-    		result.append(p.getCssProperty());
+    		appendNonNull(result, p);
     	}    
     }
     
-    protected static void createCss(TrPr trPr, StringBuffer result) {
+    protected static void createCss(TrPr trPr, StringBuilder result) {
     	// includes jc, trHeight, wAfter, tblCellSpacing
     	
 		if (trPr==null) {
@@ -210,11 +231,11 @@ public class HtmlCssHelper {
     	
     	List<Property> properties = PropertyFactory.createProperties(trPr);    	
     	for( Property p :  properties ) {
-    		result.append(p.getCssProperty());
+    		appendNonNull(result, p);
     	}    
     }
     
-    protected static void createCss(TcPr tcPr, StringBuffer result) {
+    protected static void createCss(TcPr tcPr, StringBuilder result) {
     	// includes TcPrInner.TcBorders, CTShd, TcMar, CTVerticalJc
     	
 		if (tcPr==null) {
@@ -223,11 +244,11 @@ public class HtmlCssHelper {
     	
     	List<Property> properties = PropertyFactory.createProperties(tcPr);    	
     	for( Property p :  properties ) {
-    		result.append(p.getCssProperty());
+    		appendNonNull(result, p);
     	}    
     }
     
-    public static void createCss(OpcPackage opcPackage, PPr pPr, StringBuffer result, boolean ignoreBorders) {
+    public static void createCss(OpcPackage opcPackage, PPr pPr, StringBuilder result, boolean ignoreBorders) {
     	
 		if (pPr==null) {
 			return;
@@ -251,20 +272,26 @@ public class HtmlCssHelper {
 				result.append("border-color: #" + fill + "; border-style:solid; border-width:1px;");
 			}
     		
-    		result.append(p.getCssProperty());
+    		appendNonNull(result, p);
     	}    
     }
     
-    
-    public static void createCss(OpcPackage opcPackage, RPr rPr, StringBuffer result) {
+    public static void createCss(OpcPackage opcPackage, RPr rPr, StringBuilder result) {
 
     	List<Property> properties = PropertyFactory.createProperties(opcPackage, rPr);
     	
     	for( Property p :  properties ) {
-    		result.append(p.getCssProperty());
+    		appendNonNull(result, p);
     	}
     }
 
+    private static void appendNonNull(StringBuilder result, Property p) {
+		String prop = p.getCssProperty();
+		if (prop!=null) {
+			result.append(prop);
+		}
+    }
+    
 	public static void applyAttributes(List<Property> properties, Element node) {
 	Map<String, Property> tempAttributeMap = null;
 	StringBuilder buffer = null;

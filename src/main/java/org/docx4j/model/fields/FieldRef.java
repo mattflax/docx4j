@@ -2,18 +2,17 @@ package org.docx4j.model.fields;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.StringTokenizer;
 
-import javax.xml.bind.JAXBElement;
-
-import org.apache.log4j.Logger;
 import org.docx4j.XmlUtils;
 import org.docx4j.jaxb.Context;
 import org.docx4j.wml.CTFFData;
 import org.docx4j.wml.ContentAccessor;
 import org.docx4j.wml.FldChar;
-import org.docx4j.wml.P;
 import org.docx4j.wml.R;
 import org.docx4j.wml.Text;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The objective of this class is to represent a complex field
@@ -276,7 +275,7 @@ import org.docx4j.wml.Text;
  */
 public class FieldRef {
 	
-	private static Logger log = Logger.getLogger(FieldRef.class);			
+	private static Logger log = LoggerFactory.getLogger(FieldRef.class);			
 	
 	public FieldRef(FldChar fldCharBegin) {
 		this.fldCharBegin = fldCharBegin;
@@ -299,7 +298,14 @@ public class FieldRef {
 			return FormattingSwitchHelper.getFldSimpleName( ((Text)o).getValue() );
 		} else {
 			log.error("TODO: extract field name from " + o.getClass().getName() );
-			log.error(XmlUtils.marshaltoString(instructions.get(0), true, true) );
+			if (o instanceof FieldRef) {
+				// contains a nested field?!
+				FieldRef nested = (FieldRef)o;
+				log.error("Nested field " + nested.getFldName() );				
+				
+			} else {
+				log.error(XmlUtils.marshaltoString(instructions.get(0), true, true) );
+			}
 			return null;
 		}
 	}	
@@ -346,6 +352,29 @@ public class FieldRef {
 		lock = fldCharBegin.isFldLock();
 	}
 	
+	private Boolean mergeFormat;
+	/**
+	 * @return whether \* MERGEFORMAT is set
+	 */
+	public Boolean isMergeFormat() {
+		
+		if (mergeFormat==null) {
+			//Work it out. Assume for now that this is contained in instructions.get(0).
+			mergeFormat = Boolean.FALSE;
+			Object o = XmlUtils.unwrap(instructions.get(0));
+			if (o instanceof Text) {
+				String instr = ((Text)o).getValue();
+				if (instr.contains("MERGEFORMAT")) {
+					mergeFormat = Boolean.TRUE;
+				}
+			} else {
+				log.error("TODO: extract field name from " + o.getClass().getName() );
+				log.error(XmlUtils.marshaltoString(instructions.get(0), true, true) );				
+			}
+		}
+		return mergeFormat;
+	}
+
 	private boolean dirty;
 
 	/**
@@ -488,20 +517,28 @@ public class FieldRef {
 	
 	public void setResult(String val) {
 		
-		Text t = null;
-		if (resultsSlot.getContent().size()==0) {
-			t = Context.getWmlObjectFactory().createText();
-			resultsSlot.getContent().add(t);
-//		} else if (XmlUtils.unwrap(resultsSlot.getContent().get(0)) instanceof FldChar ) { // Shouldn't happen; neither separate nor end should be in this run
-//			t = Context.getWmlObjectFactory().createText();
-//			resultsSlot.getContent().add(0, t);
-		} else if (XmlUtils.unwrap(resultsSlot.getContent().get(0)) instanceof Text ) {
-			t = (Text)XmlUtils.unwrap(resultsSlot.getContent().get(0));
-		} else {
-			log.warn("Couldn't setResult '" + val + "' at " + resultsSlot.getContent().get(0).getClass().getName() );
-			return;
+		resultsSlot.getContent().clear();
+		StringTokenizer st = new StringTokenizer(val, "\n\r\f"); // tokenize on the newline character, the carriage-return character, and the form-feed character
+		
+		// our docfrag may contain several runs
+		boolean firsttoken = true;
+		while (st.hasMoreTokens()) {						
+			String line = (String) st.nextToken();
+			
+			if (firsttoken) {
+				firsttoken = false;
+			} else {
+				resultsSlot.getContent().add(Context.getWmlObjectFactory().createBr());
+			}
+			
+			org.docx4j.wml.Text text = Context.getWmlObjectFactory().createText();
+			resultsSlot.getContent().add(text);
+			if (line.startsWith(" ") || line.endsWith(" ") ) {
+				// TODO: tab character?
+				text.setSpace("preserve");
+			}
+			text.setValue(line);
 		}
-		t.setValue(val);		
 	}
 
 }

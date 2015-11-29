@@ -28,7 +28,6 @@ import java.io.InputStream;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -45,8 +44,10 @@ import javax.xml.namespace.QName;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
 import javax.xml.transform.ErrorListener;
-import javax.xml.transform.Result;
 import javax.xml.transform.Templates;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerConfigurationException;
@@ -58,12 +59,7 @@ import javax.xml.transform.stream.StreamSource;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 
-import org.apache.log4j.Logger;
-import org.apache.xalan.trace.PrintTraceListener;
-import org.apache.xalan.trace.TraceManager;
-import org.apache.xalan.transformer.TransformerImpl;
 import org.docx4j.jaxb.Context;
 import org.docx4j.jaxb.JAXBAssociation;
 import org.docx4j.jaxb.JaxbValidationEventHandler;
@@ -71,6 +67,10 @@ import org.docx4j.jaxb.NamespacePrefixMapperUtils;
 import org.docx4j.jaxb.NamespacePrefixMappings;
 import org.docx4j.jaxb.XPathBinderAssociationIsPartialException;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
+import org.docx4j.openpackaging.parts.JaxbXmlPart;
+import org.docx4j.utils.XPathFactoryUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
 import org.w3c.dom.NamedNodeMap;
@@ -81,7 +81,7 @@ import org.xml.sax.SAXException;
 
 public class XmlUtils {
 	
-	private static Logger log = Logger.getLogger(XmlUtils.class);	
+	private static Logger log = LoggerFactory.getLogger(XmlUtils.class);	
 		
 	// See http://www.edankert.com/jaxpimplementations.html for
 	// a helpful list.
@@ -104,15 +104,35 @@ public class XmlUtils {
 		return transformerFactory;
 	}
 
-	private static DocumentBuilderFactory documentBuilderFactory;
+	final private static DocumentBuilderFactory documentBuilderFactory;
 	/**
 	 * @since 2.8.1
 	 * 
 	 * TODO replace the various DocumentBuilderFactory.newInstance()
 	 * throughout docx4j with a call to this.
 	 */
+	@Deprecated
 	public static DocumentBuilderFactory getDocumentBuilderFactory() {
 		return documentBuilderFactory;
+	}
+
+	/**
+	 * Use the suitably configured DocumentBuilderFactory to provide
+	 * a new instance of DocumentBuilder. Remember that DocumentBuilder is not thread-safe!
+	 * @return
+	 * @since 3.2.0
+	 */
+	public static DocumentBuilder getNewDocumentBuilder() {
+		synchronized (documentBuilderFactory) {
+			// see https://community.oracle.com/thread/1626108 for inconclusive discussion about whether a pool would be worthwhile 
+			try {
+				return documentBuilderFactory.newDocumentBuilder();
+			} catch (ParserConfigurationException e) {
+				// Catch this, since its unlikely to happen 
+				log.error(e.getMessage(), e);
+				return null;
+			}
+		}
 	}
 	
 	static {
@@ -140,7 +160,14 @@ public class XmlUtils {
 		} else if ((System.getProperty("java.version").startsWith("1.6")
 						&& System.getProperty("java.vendor").startsWith("Sun"))
 				|| (System.getProperty("java.version").startsWith("1.7")
-						&& System.getProperty("java.vendor").startsWith("Oracle"))) {
+						&& System.getProperty("java.vendor").startsWith("Oracle"))
+				|| (System.getProperty("java.version").startsWith("1.8")
+						&& System.getProperty("java.vendor").startsWith("Oracle"))
+				|| (System.getProperty("java.version").startsWith("1.9")
+						&& System.getProperty("java.vendor").startsWith("Oracle"))
+				|| (System.getProperty("java.version").startsWith("1.7")
+						&& System.getProperty("java.vendor").startsWith("Jeroen")) // IKVM
+				) {
 
 	    	// Crimson fails to parse the HTML XSLT, so use Xerces ..
 			// .. this one is available in Java 6.	
@@ -159,7 +186,8 @@ public class XmlUtils {
 			//				"org.apache.xerces.jaxp.SAXParserFactoryImpl");
 			
 			
-			log.warn("Using default SAXParserFactory: " + System.getProperty("javax.xml.parsers.SAXParserFactory" ));
+			log.warn("default SAXParserFactory property : " + System.getProperty("javax.xml.parsers.SAXParserFactory" )
+					+ "\n Please consider using Xerces.");
 		}
 		// Note that we don't restore the value to its original setting (unlike TransformerFactory),
 		// since we want to avoid Crimson being used for the life of the application.
@@ -179,7 +207,12 @@ public class XmlUtils {
 		} else if ((System.getProperty("java.version").startsWith("1.6")
 						&& System.getProperty("java.vendor").startsWith("Sun"))
 				|| (System.getProperty("java.version").startsWith("1.7")
-						&& System.getProperty("java.vendor").startsWith("Oracle"))) {
+						&& System.getProperty("java.vendor").startsWith("Oracle"))
+				|| (System.getProperty("java.version").startsWith("1.8")
+						&& System.getProperty("java.vendor").startsWith("Oracle"))
+				|| (System.getProperty("java.version").startsWith("1.7")
+						&& System.getProperty("java.vendor").startsWith("Jeroen")) // IKVM
+				) {
 		
 			// Crimson doesn't support setTextContent; this.writeDocument also fails.
 			// We've already worked around the problem with setTextContent,
@@ -198,14 +231,33 @@ public class XmlUtils {
 			//		    "org.apache.xerces.jaxp.DocumentBuilderFactoryImpl");
 			// which is what we used to do in XmlPart.
 			
-			log.warn("Using default DocumentBuilderFactory: " 
-					+ System.getProperty("javax.xml.parsers.DocumentBuilderFactory" ));
+			log.warn("default DocumentBuilderFactory property: " 
+					+ System.getProperty("javax.xml.parsers.DocumentBuilderFactory" )
+					+ "\n Please consider using Xerces.");
+					
 		}
 		
 		documentBuilderFactory = DocumentBuilderFactory.newInstance();
 		documentBuilderFactory.setNamespaceAware(true);
 		// Note that we don't restore the value to its original setting (unlike TransformerFactory).
 		// Maybe we could, if docx4j always used this documentBuilderFactory.
+		try {
+			documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+		} catch (ParserConfigurationException e) { log.error(e.getMessage(), e); }
+		documentBuilderFactory.setXIncludeAware(false);
+		documentBuilderFactory.setExpandEntityReferences(false);
+		try {
+			documentBuilderFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+		} catch (ParserConfigurationException e) { log.error(e.getMessage(), e); }
+		try {
+			documentBuilderFactory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+		} catch (ParserConfigurationException e) { log.error(e.getMessage(), e); }
+//		try {
+//			documentBuilderFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+//		} catch (ParserConfigurationException e) { log.error(e.getMessage(), e); }
+		
+		// see also https://svn.apache.org/repos/asf/shindig/trunk/java/common/src/main/java/org/apache/shindig/common/xml/XmlUtil.java
+		// for how Shindig does it
 		
 	}
 	
@@ -235,7 +287,7 @@ public class XmlUtils {
 		} catch (javax.xml.transform.TransformerFactoryConfigurationError e) {
 			
 			// Provider org.apache.xalan.processor.TransformerFactoryImpl not found
-			log.error("Warning: Xalan jar missing from classpath; xslt not supported",e);
+			log.warn("Xalan jar missing from classpath; xslt not supported");
 			
 			// so try using whatever TransformerFactory is available
 			if (originalSystemProperty == null) {
@@ -321,6 +373,22 @@ public class XmlUtils {
 		
 	}
 
+	/**
+	 * @param list
+	 * @param name
+	 * @return
+	 * @since 3.2.0
+	 */
+	public static JAXBElement<?> getListItemByQName(List<JAXBElement<?>> list, QName name) {
+		
+		for(JAXBElement<?> el : list) {
+			
+			if (el.getName().equals(name)) {
+				return el;
+			}
+		}
+		return null;
+	}
 	
 
 	/** Unmarshal an InputStream as an object in the package org.docx4j.jaxb.document.
@@ -333,10 +401,22 @@ public class XmlUtils {
 	}
 
 	public static Object unmarshal(InputStream is, JAXBContext jc) throws JAXBException {
+		
+		// Guard against XXE
+        XMLInputFactory xif = XMLInputFactory.newInstance();
+        xif.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+        xif.setProperty(XMLInputFactory.SUPPORT_DTD, false); // a DTD is merely ignored, its presence doesn't cause an exception
+        XMLStreamReader xsr = null;
+        try {
+			xsr = xif.createXMLStreamReader(is);
+		} catch (XMLStreamException e) {
+			throw new JAXBException(e);
+		}			
+		
 		Object o = null;
 		Unmarshaller u = jc.createUnmarshaller();						
 		u.setEventHandler(new org.docx4j.jaxb.JaxbValidationEventHandler());
-		o = u.unmarshal( is );
+		o = u.unmarshal( xsr );
 		return o;
 	}
 	
@@ -447,7 +527,35 @@ public class XmlUtils {
 	    }
 	 }
 
+	/**
+	 * Marshal this object to a String, pretty printed, and without an XML declaration.
+	 * Useful for debugging.
+	 * 
+	 * @param o
+	 * @return
+	 * @since 3.0.1
+	 */
+	public static String marshaltoString(Object o ) {
+
+		JAXBContext jc = Context.jc;
+		return marshaltoString(o, true, true, jc );
+	}
+
+	/**
+	 * Use the specified JAXBContext to marshal this object to a String, pretty printed, and without an XML declaration.
+	 * Useful for debugging.
+	 * 
+	 * @param o
+	 * @return
+	 * @since 3.0.1
+	 */
+	public static String marshaltoString(Object o, JAXBContext jc ) {
+
+		return marshaltoString(o, true, true, jc );
+	}
+		
 	/** Marshal to a String */ 
+	@Deprecated
 	public static String marshaltoString(Object o, boolean suppressDeclaration ) {
 
 		JAXBContext jc = Context.jc;
@@ -455,6 +563,7 @@ public class XmlUtils {
 	}
 
 	/** Marshal to a String */ 
+	@Deprecated
 	public static String marshaltoString(Object o, boolean suppressDeclaration, JAXBContext jc ) {
 
 		return marshaltoString(o, suppressDeclaration, false, jc );
@@ -621,10 +730,7 @@ public class XmlUtils {
 
 			Marshaller marshaller = jc.createMarshaller();
 
-			javax.xml.parsers.DocumentBuilderFactory dbf = DocumentBuilderFactory
-					.newInstance();
-			dbf.setNamespaceAware(true);
-			org.w3c.dom.Document doc = dbf.newDocumentBuilder().newDocument();
+			org.w3c.dom.Document doc = XmlUtils.getNewDocumentBuilder().newDocument();
 
 			NamespacePrefixMapperUtils.setProperty(marshaller, 
 					NamespacePrefixMapperUtils.getPrefixMapper());			
@@ -633,8 +739,6 @@ public class XmlUtils {
 
 			return doc;
 		} catch (JAXBException e) {
-		    throw new RuntimeException(e);
-		} catch (ParserConfigurationException e) {
 		    throw new RuntimeException(e);
 		}
 	}
@@ -647,11 +751,7 @@ public class XmlUtils {
 		try {
 
 			Marshaller marshaller = jc.createMarshaller();
-
-			javax.xml.parsers.DocumentBuilderFactory dbf = DocumentBuilderFactory
-					.newInstance();
-			dbf.setNamespaceAware(true);
-			org.w3c.dom.Document doc = dbf.newDocumentBuilder().newDocument();
+			org.w3c.dom.Document doc = XmlUtils.getNewDocumentBuilder().newDocument();
 
 			NamespacePrefixMapperUtils.setProperty(marshaller, 
 					NamespacePrefixMapperUtils.getPrefixMapper());			
@@ -663,8 +763,6 @@ public class XmlUtils {
 
 			return doc;
 		} catch (JAXBException e) {
-		    throw new RuntimeException(e);
-		} catch (ParserConfigurationException e) {
 		    throw new RuntimeException(e);
 		}
 	}
@@ -705,10 +803,31 @@ public class XmlUtils {
 			Marshaller mar = jc.createMarshaller();
 			ByteArrayOutputStream bout = new ByteArrayOutputStream(256);
 			mar.marshal(elem, bout);
+			
+//			byte[] bytes = bout.toByteArray();
+//			try {
+//				System.out.println(new String(bytes, "UTF-8"));
+//			} catch (UnsupportedEncodingException e) {
+//				e.printStackTrace();
+//			}
 
 			Unmarshaller unmar = jc.createUnmarshaller();
+			if (log.isDebugEnabled()){
+				unmar.setEventHandler(new org.docx4j.jaxb.JaxbValidationEventHandler());
+			}
 			elem = unmar.unmarshal(new StreamSource(new ByteArrayInputStream(
 					bout.toByteArray())), valueClass);
+			
+			/*
+			 * Losing content here?
+			 * 
+			 * First, make absolutely sure that what you have is valid.
+			 * 
+			 * For example, Word 2010 is happy to open w:p/w:pict
+			 * (as opposed to w:p/w:r/w:pict).
+			 * docx4j is happy to marshall w:p/w:pict, but not unmarshall it,
+			 * so that content would get dropped here.
+			 */
 
 			T res;
 			if (value instanceof JAXBElement<?>) {
@@ -752,13 +871,7 @@ public class XmlUtils {
 	/** Use DocumentBuilderFactory to create and return a new w3c dom Document. */ 
 	public static org.w3c.dom.Document neww3cDomDocument() {
 		
-		try {
-			javax.xml.parsers.DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-			dbf.setNamespaceAware(true);
-			return dbf.newDocumentBuilder().newDocument();
-		} catch (ParserConfigurationException e) {
-                    throw new RuntimeException(e);
-		}		
+		return XmlUtils.getNewDocumentBuilder().newDocument();
 		
 	}
 	
@@ -774,10 +887,7 @@ public class XmlUtils {
 	public static void appendXmlFragment(Document document, Node parent, String fragment)
 			throws IOException, SAXException, ParserConfigurationException {
 
-		DocumentBuilder docBuilder = DocumentBuilderFactory.newInstance()
-				.newDocumentBuilder();
-
-		Node fragmentNode = docBuilder.parse(
+		Node fragmentNode = XmlUtils.getNewDocumentBuilder().parse(
 				new InputSource(new StringReader(fragment)))
 				.getDocumentElement();
 		
@@ -886,6 +996,8 @@ public class XmlUtils {
 					continue;
 				}
 
+				if (pairs.getKey().equals("customXsltTemplates")) continue;
+				
 				if (pairs.getValue() == null) {
 					log.warn("parameter '" + pairs.getKey() + "' was null.");
 				} else {
@@ -1014,10 +1126,14 @@ public class XmlUtils {
 		if (refreshXmlFirst) 
 			node = binder.updateXML(jaxbElement);
 		node = binder.getXMLNode(jaxbElement);
+		if (node==null) {
+			throw new XPathBinderAssociationIsPartialException("binder.getXMLNode returned null");
+		}
 		
 		//log.debug("XPath will execute against: " + XmlUtils.w3CDomNodeToString(node));
 		
         List<JAXBAssociation> resultList = new ArrayList<JAXBAssociation>();
+        
         for( Node n : xpath(node, xpathExpr) ) {
         	resultList.add(new JAXBAssociation(n, binder.getJAXBNode(n)));
         }
@@ -1025,43 +1141,33 @@ public class XmlUtils {
     }
 	
     public static List<Node> xpath(Node node, String xpathExpression) {
-        XPathFactory xpf = XPathFactory.newInstance();
-        XPath xpath = xpf.newXPath();
 
         NamespaceContext nsContext = new NamespacePrefixMappings();
-        
         return xpath(node, xpathExpression, nsContext);
-        
     }	
 
     public static List<Node> xpath(Node node, String xpathExpression, NamespaceContext nsContext) {
     	
-//    	log.info("Using XPathFactory: " + XPathFactory.DEFAULT_PROPERTY_NAME + ": " 
-//    			+ System.getProperty(XPathFactory.DEFAULT_PROPERTY_NAME));    
-//        System.setProperty(XPathFactory.DEFAULT_PROPERTY_NAME, 
-//        		"org.apache.xpath.jaxp.XPathFactoryImpl");
-        // com.sun.org.apache.xpath.internal.jaxp.XPathFactoryImpl
-        
-        log.debug(w3CDomNodeToString(node));
+    	if (log.isDebugEnabled()) {
+        	log.debug(w3CDomNodeToString(node));
+    	}
         
         // create XPath
-        XPathFactory xpf = XPathFactory.newInstance();
-        XPath xpath = xpf.newXPath();
-        
-        log.debug("xpath implementation: " + xpath.getClass().getName());
-
-		xpath.setNamespaceContext(nsContext);
+        XPath xpath = XPathFactoryUtil.newXPath();
         
         try {
             List<Node> result = new ArrayList<Node>();
+            
+    		xpath.setNamespaceContext(nsContext);
             NodeList nl = (NodeList) xpath.evaluate(xpathExpression, node, XPathConstants.NODESET);
+            
             log.info("evaluate returned " + nl.getLength() );
             for( int i=0; i<nl.getLength(); i++ ) {
                 result.add(nl.item(i));
             }
             return result;
         } catch (XPathExpressionException e) {
-            log.error(e);
+			log.error("Problem with '" + xpathExpression + "'", e);
             throw new RuntimeException(e);
         }
     }	
@@ -1146,7 +1252,8 @@ public class XmlUtils {
     	
         switch (sourceNode.getNodeType() ) {
 
-        	case Node.DOCUMENT_NODE: // type 9
+	    	case Node.DOCUMENT_NODE: // type 9
+        	case Node.DOCUMENT_FRAGMENT_NODE: // type 11
         
 //        		log.debug("DOCUMENT:" + w3CDomNodeToString(sourceNode) );
 //        		if (sourceNode.getChildNodes().getLength()==0) {

@@ -26,11 +26,9 @@ import java.util.Map;
 
 import javax.xml.transform.TransformerException;
 
-import org.apache.log4j.Logger;
-import org.docx4j.convert.out.AbstractWmlConversionContext;
-import org.docx4j.convert.out.ModelConverter;
-import org.docx4j.model.Model;
-import org.docx4j.model.TransformState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.docx4j.convert.out.common.AbstractWmlConversionContext;
 import org.docx4j.model.fields.FieldValueException;
 import org.docx4j.model.fields.FldSimpleModel;
 import org.docx4j.model.fields.FormattingSwitchHelper;
@@ -44,9 +42,9 @@ import org.docx4j.wml.RPr;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
-public abstract class AbstractFldSimpleWriter implements ModelConverter {
-	
-	private static Logger log = Logger.getLogger(AbstractFldSimpleWriter.class);			
+public abstract class AbstractFldSimpleWriter extends AbstractSimpleWriter {
+	public static final String WRITER_ID = "w:fldSimple";
+	private static Logger log = LoggerFactory.getLogger(AbstractFldSimpleWriter.class);			
 	
 	public interface FldSimpleWriterHandler {
 		public String getName();
@@ -109,15 +107,12 @@ public abstract class AbstractFldSimpleWriter implements ModelConverter {
 			
 			// First, get the value
 			DocPropertyResolver dpr = new DocPropertyResolver(context.getWmlPackage());
-			List<String> params = model.getFldParameters();
-			
-			//String key = params.get(0);
-			String key = model.getFldParameterString();
+			String key = model.getFldArgument();
 			
 			try {
 				String value = dpr.getValue(key).toString();
 				log.debug("= " + value);
-				return FormattingSwitchHelper.applyFormattingSwitch(model, value);
+				return FormattingSwitchHelper.applyFormattingSwitch(context.getWmlPackage(), model, value);
 			} catch (FieldValueException e) {
 				
 				if (e.getMessage().contains("No value found for DOCPROPERTY PAGES")) {// TODO improve this
@@ -147,6 +142,7 @@ public abstract class AbstractFldSimpleWriter implements ModelConverter {
 	protected String elementName = null;
 	
 	protected AbstractFldSimpleWriter(String elementNs, String elementName) {
+		super(WRITER_ID);
 		registerHandlers();
 		defaultHandler = createDefaultHandler();
 		this.elementNs = elementNs;
@@ -182,17 +178,11 @@ public abstract class AbstractFldSimpleWriter implements ModelConverter {
 			}
 		};
 	}
-	
-	@Override
-	public String getID() {
-		return FldSimpleModel.MODEL_ID;
-	}
 
 	@Override
-	public Node toNode(AbstractWmlConversionContext context, Model model, 
-			TransformState state, Document doc) throws TransformerException {
-		
-		FldSimpleModel fldSimpleModel = (FldSimpleModel)model;
+	public Node toNode(AbstractWmlConversionContext context, Object unmarshalledNode, Node content, TransformState state, Document doc) throws TransformerException {
+	FldSimpleModel fldSimpleModel = new FldSimpleModel();
+		fldSimpleModel.build((CTSimpleField)unmarshalledNode, content);
 		
 		log.debug("looking for handler for " + fldSimpleModel.getFldName());
 		
@@ -317,11 +307,5 @@ public abstract class AbstractFldSimpleWriter implements ModelConverter {
 	}
 
 	protected abstract void applyProperties(List<Property> properties, Node node);
-	
-	@Override
-	public TransformState createTransformState() {
-		// no TransformState used 
-		return null;
-	}
 
 }

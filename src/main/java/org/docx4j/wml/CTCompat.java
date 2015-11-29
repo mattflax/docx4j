@@ -1,5 +1,5 @@
 /*
- *  Copyright 2007-2012, Plutext Pty Ltd.
+ *  Copyright 2007-2013, Plutext Pty Ltd.
  *   
  *  This file is part of docx4j.
 
@@ -19,7 +19,9 @@
  */
 
 
-package org.docx4j.wml;
+package org.docx4j.wml; 
+
+import org.jvnet.jaxb2_commons.ppp.Child;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,7 +30,6 @@ import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlTransient;
 import javax.xml.bind.annotation.XmlType;
-import org.jvnet.jaxb2_commons.ppp.Child;
 
 
 /**
@@ -116,7 +117,7 @@ import org.jvnet.jaxb2_commons.ppp.Child;
  * 
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(namespace="http://schemas.openxmlformats.org/wordprocessingml/2006/main", name = "CT_Compat", propOrder = {
+@XmlType(name = "CT_Compat", propOrder = {
     "useSingleBorderforContiguousCells",
     "wpJustification",
     "noTabHangInd",
@@ -184,8 +185,7 @@ import org.jvnet.jaxb2_commons.ppp.Child;
     "cachedColBalance",
     "compatSetting"
 })
-public class CTCompat
-    implements Child
+public class CTCompat implements Child
 {
 
     protected BooleanDefaultTrue useSingleBorderforContiguousCells;
@@ -1845,7 +1845,31 @@ public class CTCompat
         }
         return this.compatSetting;
     }
+    
+    public CTCompatSetting getCompatSetting(String name, String uri) {
+    	
+    	for (CTCompatSetting setting : getCompatSetting() ) {
+    		
+    		if (name.equals(setting.getName())
+    				&& uri.equals(setting.getUri()) ) {
+    			return setting;
+    		}
+    	}
+    	return null;
+    }
 
+    public void setCompatSetting(String name, String uri, String val) {
+    	
+    	CTCompatSetting setting = getCompatSetting( name,  uri);
+    	if (setting==null) {
+    		setting = new CTCompatSetting();
+    		getCompatSetting().add(setting);
+    	}
+		setting.setName(name);
+		setting.setUri(uri);
+		setting.setVal(val);
+    }
+    
     /**
      * Gets the parent object in the object tree representing the unmarshalled xml document.
      * 

@@ -25,16 +25,13 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import javax.xml.bind.JAXBElement;
+import javax.xml.namespace.QName;
 import javax.xml.transform.TransformerException;
 
-import org.apache.log4j.Logger;
 import org.docx4j.UnitsOfMeasurement;
 import org.docx4j.XmlUtils;
-import org.docx4j.convert.out.AbstractWmlConversionContext;
-import org.docx4j.convert.out.ModelConverter;
+import org.docx4j.convert.out.common.AbstractWmlConversionContext;
 import org.docx4j.jaxb.Context;
-import org.docx4j.model.Model;
-import org.docx4j.model.TransformState;
 import org.docx4j.model.properties.Property;
 import org.docx4j.model.properties.PropertyFactory;
 import org.docx4j.model.properties.table.AbstractBorder;
@@ -48,10 +45,10 @@ import org.docx4j.model.properties.table.CellMarginRight;
 import org.docx4j.model.properties.table.CellMarginTop;
 import org.docx4j.model.properties.table.tc.Shading;
 import org.docx4j.model.properties.table.tc.TextAlignmentVertical;
+import org.docx4j.model.properties.table.tr.TrCantSplit;
 import org.docx4j.model.properties.table.tr.TrHeight;
-import org.docx4j.model.table.Cell;
-import org.docx4j.model.table.TableModel;
-import org.docx4j.model.table.TableModelRow;
+import org.docx4j.openpackaging.parts.relationships.Namespaces;
+import org.docx4j.wml.BooleanDefaultTrue;
 import org.docx4j.wml.CTBorder;
 import org.docx4j.wml.CTHeight;
 import org.docx4j.wml.CTShd;
@@ -64,6 +61,8 @@ import org.docx4j.wml.TblBorders;
 import org.docx4j.wml.TblGridCol;
 import org.docx4j.wml.TcPr;
 import org.docx4j.wml.TrPr;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.DOMException;
 import org.w3c.dom.Document;
 import org.w3c.dom.DocumentFragment;
@@ -75,7 +74,13 @@ import org.w3c.dom.Node;
  *  @since 3.0.0
  *  
 */
-public abstract class AbstractTableWriter implements ModelConverter {
+public abstract class AbstractTableWriter extends AbstractSimpleWriter {
+	
+	private static Logger log = LoggerFactory.getLogger(AbstractTableWriter.class);
+	
+	
+	public static final String WRITER_ID = "w:tbl";
+	
   
   protected static final int NODE_TABLE = 0;
   protected static final int NODE_TABLE_COLUMN_GROUP = 1;
@@ -164,22 +169,32 @@ public abstract class AbstractTableWriter implements ModelConverter {
 		}
 	}
 	  
-	
-	@Override
-	public String getID() {
-		return TableModel.MODEL_ID;
+	protected AbstractTableWriter() {
+		super(WRITER_ID);
 	}
 
-@Override
-  public TransformState createTransformState() {
-	  return new TableModelTransformState();
-  }
+	@Override
+	public TransformState createTransformState() {
+		return new TableModelTransformState();
+	}
 
-@Override
-  public Node toNode(AbstractWmlConversionContext context, Model tableModel, TransformState transformState, Document doc) throws TransformerException {
-    TableModel table = (TableModel)tableModel;
-    getLog().debug("Table asXML:\n" + table.debugStr());
-    
+	@Override
+	public Node toNode(AbstractWmlConversionContext context, Object unmarshalledNode, Node content, TransformState transformState, Document doc) throws TransformerException {
+		Node ret = null;
+	    AbstractTableWriterModel table = new AbstractTableWriterModel();
+	    
+	    table.build(context, unmarshalledNode, content);
+	    if (log.isDebugEnabled()) {
+	        log.debug("Table asXML:\n" + table.debugStr());
+	    }
+	    
+	    if (!table.getCells().isEmpty()) {
+	    	ret = toNode(context, table, transformState, doc);
+	    }
+	    return ret;
+	}
+
+  protected Node toNode(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, Document doc) throws TransformerException {
 	DocumentFragment docfrag = doc.createDocumentFragment();
     Element tableRoot = createNode(doc, null, NODE_TABLE);
     List<Property> rowProperties = new ArrayList<Property>();
@@ -190,7 +205,7 @@ public abstract class AbstractTableWriter implements ModelConverter {
     int cellPropertiesRowSize = -1;
     boolean inHeader = (table.getHeaderMaxRow() > -1);
 
-	TableModelRow rowModel = null;
+	AbstractTableWriterModelRow rowModel = null;
 	Element rowContainer = null;
 	Element row = null;
 	Element cellNode = null;
@@ -236,7 +251,7 @@ public abstract class AbstractTableWriter implements ModelConverter {
 			cellPropertiesRowSize = cellProperties.size();
 				
 			
-			for (Cell cell : rowModel.getRowContents()) {
+			for (AbstractTableWriterModelCell cell : rowModel.getRowContents()) {
 				// process cell
 				
 				if (cell.isDummy()) {
@@ -261,9 +276,9 @@ public abstract class AbstractTableWriter implements ModelConverter {
 					// insert content into cell
 					// skipping w:tc node itself, insert only its children
 					if (cell.getContent() == null) {
-						getLog().warn("model cell had no contents!");
+						log.warn("model cell had no contents!");
 					} else {
-						getLog().debug("copying cell contents..");
+						log.debug("copying cell contents..");
 						XmlUtils.treeCopy(cell.getContent().getChildNodes(),
 								cellNode);
 					}
@@ -284,7 +299,7 @@ public abstract class AbstractTableWriter implements ModelConverter {
   		return (ret != null ? ret : parent);
   	}
 	
-	protected void createColumns(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Document doc, Element tableRoot) throws DOMException {
+	protected void createColumns(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, Document doc, Element tableRoot) throws DOMException {
 		List<TblGridCol> gridCols = (table.getTblGrid() != null ? table.getTblGrid().getGridCol() : null);
 		Element columnGroup = createNode(doc, tableRoot, NODE_TABLE_COLUMN_GROUP);
 		Element column = null;
@@ -304,13 +319,17 @@ public abstract class AbstractTableWriter implements ModelConverter {
     	}
 	}
 
-	protected void applyTableStyles(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Element tableRoot) {
+	protected void applyTableStyles(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, Element tableRoot) {
 	List<Property> tableProperties = null;
-	int tblCellSpacing = -1;
 	
 		// This handles:
 		// - position (tblPr/tblInd)
 		// - table-layout
+	
+		if (table.getEffectiveTableStyle().getTblPr()==null) {
+			log.warn("table.getEffectiveTableStyle().getTblPr() is null, but should never be");
+			return;
+		}
 	
 		tableProperties = PropertyFactory.createProperties(table.getEffectiveTableStyle().getTblPr());
 		
@@ -366,20 +385,40 @@ public abstract class AbstractTableWriter implements ModelConverter {
 	}
 
 	protected void createRowProperties(List<Property> properties, TrPr trPr, boolean includeDefaultHeight) {
-	JAXBElement<CTHeight> trHeight = (trPr != null ? 
+		
+		// handle <w:trHeight/>
+		JAXBElement<CTHeight> trHeight = (trPr != null ? 
 				(JAXBElement<CTHeight>)getElement(trPr.getCnfStyleOrDivIdOrGridBefore(), "trHeight") : 
 				null);
 		if (trHeight != null) {
 			properties.add(new TrHeight(trHeight.getValue()));
 		}
+		
+		// handle <w:cantSplit/>
+		if (trPr != null) {
+			JAXBElement<?> cantSplit = XmlUtils.getListItemByQName(trPr.getCnfStyleOrDivIdOrGridBefore(), new QName(Namespaces.NS_WORD12, "cantSplit"));
+			if (cantSplit!=null) {
+				BooleanDefaultTrue val = (BooleanDefaultTrue)XmlUtils.unwrap(cantSplit);
+				if (val.isVal()) {
+					properties.add(new TrCantSplit(cantSplit));					
+				}
+			}
+		}
 	}
 
+	
 	protected void createCellProperties(List<Property> properties, TrPr trPr) {
 		
 	}
 	
 
 	protected void createCellProperties(List<Property> properties, CTTblPrBase tblPr) {
+		
+		if (tblPr==null ) {
+			log.warn("table.getEffectiveTableStyle().getTblPr() is null, but should never be");
+			return;
+		}
+		
 	TblBorders tblBorders = tblPr.getTblBorders();
 	CTTblCellMar tblCellMargin = tblPr.getTblCellMar();
 		if (tblBorders!=null) {
@@ -430,7 +469,6 @@ public abstract class AbstractTableWriter implements ModelConverter {
 
 	protected void processAttributes(AbstractWmlConversionContext context, List<Property> properties, Element element) {
 	CTShd shd = null;
-	Shading shading = null;
 	int bgColor = 0xffffff; //the background color of the page is assumed as white
 	int fgColor = 0; //the default color of the font is assumed as black
 	int pctPattern = -1;
@@ -484,9 +522,7 @@ public abstract class AbstractTableWriter implements ModelConverter {
 
 	protected Property createShading(int fgColor, int bgColor, int pctFg) {
 	CTShd shd = null;
-	Shading ret = null;
 	int resColor = UnitsOfMeasurement.combineColors(fgColor, bgColor, pctFg);
-	String hResColor = UnitsOfMeasurement.toHexColor(resColor);
 		shd = Context.getWmlObjectFactory().createCTShd();
 		shd.setVal(STShd.CLEAR);
 		shd.setFill(calcHexColor(resColor));
@@ -507,29 +543,29 @@ public abstract class AbstractTableWriter implements ModelConverter {
 	/*
 	 *  These are the main methods the subclasses have to or should override
 	 */
-	protected abstract Logger getLog();
+	//protected abstract Logger getLog();
 	
   	protected abstract Element createNode(Document doc, int nodeType);
 
 	protected abstract void applyAttributes(AbstractWmlConversionContext context, List<Property> properties, Element element);
 	  
 	
-	protected void applyTableCustomAttributes(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Element tableRoot) {
+	protected void applyTableCustomAttributes(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, Element tableRoot) {
 	}
 	
-	protected void applyColumnGroupCustomAttributes(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Element columnGroup) {
+	protected void applyColumnGroupCustomAttributes(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, Element columnGroup) {
 	}
 
-	protected void applyColumnCustomAttributes(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Element column, int columnIndex, int columnWidth) {
+	protected void applyColumnCustomAttributes(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, Element column, int columnIndex, int columnWidth) {
 	}
 	
-  	protected void applyTableRowContainerCustomAttributes(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Element rowContainer, boolean isHeader) {
+  	protected void applyTableRowContainerCustomAttributes(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, Element rowContainer, boolean isHeader) {
   	}
     
-  	protected void applyTableRowCustomAttributes(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Element row, int rowIndex, boolean isHeader) {  		
+  	protected void applyTableRowCustomAttributes(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, Element row, int rowIndex, boolean isHeader) {  		
   	}
   	
-  	protected void applyTableCellCustomAttributes(AbstractWmlConversionContext context, TableModel table, TransformState transformState, Cell tableCell, Element cellNode, boolean isHeader, boolean isDummyCell) {
+  	protected void applyTableCellCustomAttributes(AbstractWmlConversionContext context, AbstractTableWriterModel table, TransformState transformState, AbstractTableWriterModelCell tableCell, Element cellNode, boolean isHeader, boolean isDummyCell) {
   	}
 
 }

@@ -30,14 +30,16 @@ import javax.xml.transform.Templates;
 import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.stream.StreamSource;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.docx4j.XmlUtils;
+import org.docx4j.utils.ResourceUtils;
 
 
 public class JaxbValidationEventHandler implements 
 ValidationEventHandler{
     
-	private static Logger log = Logger.getLogger(JaxbValidationEventHandler.class);		
+	private static Logger log = LoggerFactory.getLogger(JaxbValidationEventHandler.class);		
 	
 	private boolean shouldContinue = true;
 	public void setContinue(boolean val) {
@@ -51,18 +53,12 @@ ValidationEventHandler{
 	public static Templates getMcPreprocessor() throws IOException, TransformerConfigurationException {
 		
 		if (mcPreprocessorXslt==null) {
-			try {
-				Source xsltSource  = new StreamSource(
-						org.docx4j.utils.ResourceUtils.getResource(
-								"org/docx4j/jaxb/mc-preprocessor.xslt"));
-				mcPreprocessorXslt = XmlUtils.getTransformerTemplate(xsltSource);
-			} catch (IOException e) {
-				log.error(e);
-				throw(e);
-			} catch (TransformerConfigurationException e) {
-				log.error(e);
-				throw(e);
-			}
+			
+			Source xsltSource  = new StreamSource(
+					ResourceUtils.getResourceViaProperty("docx4j.jaxb.JaxbValidationEventHandler", 
+							"org/docx4j/jaxb/mc-preprocessor.xslt")
+					);
+			mcPreprocessorXslt = XmlUtils.getTransformerTemplate(xsltSource);
 		}
 		
 		return mcPreprocessorXslt;

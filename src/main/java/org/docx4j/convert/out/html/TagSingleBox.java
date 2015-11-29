@@ -23,18 +23,14 @@ import java.io.IOException;
 import java.util.HashMap;
 
 import javax.xml.bind.JAXBException;
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.TransformerException;
 
-import org.apache.log4j.Logger;
 import org.docx4j.XmlUtils;
-import org.docx4j.jaxb.Context;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
-import org.docx4j.wml.Id;
-import org.docx4j.wml.P;
-import org.docx4j.wml.PPr;
 import org.docx4j.wml.SdtPr;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.DocumentFragment;
 import org.w3c.dom.Element;
@@ -68,7 +64,7 @@ import org.xml.sax.SAXException;
  */
 public class TagSingleBox extends SdtTagHandler {
 
-	private static Logger log = Logger.getLogger(TagSingleBox.class);
+	private static Logger log = LoggerFactory.getLogger(TagSingleBox.class);
 
 	private Element createDiv(Document document, DocumentFragment docfrag, 
 			Node n) throws ParserConfigurationException, IOException, SAXException, JAXBException {
@@ -109,9 +105,7 @@ public class TagSingleBox extends SdtTagHandler {
 
 		try {
 			// Create a DOM builder and parse the fragment
-			DocumentBuilderFactory factory = DocumentBuilderFactory
-					.newInstance();
-			Document document = factory.newDocumentBuilder().newDocument();
+			Document document = XmlUtils.getNewDocumentBuilder().newDocument();
 			DocumentFragment docfrag = document.createDocumentFragment();
 			
 			Node contents = childResults.nextNode();
@@ -125,8 +119,7 @@ public class TagSingleBox extends SdtTagHandler {
 			return attachContents(docfrag, xhtmlDiv, contents);
 			
 		} catch (Exception e) {
-			e.printStackTrace();
-			log.error(e);
+			log.error(e.getMessage(), e);
 			throw new TransformerException(e);
 		}
 
@@ -140,9 +133,7 @@ public class TagSingleBox extends SdtTagHandler {
 			
 			try {
 				// Create a DOM builder and parse the fragment
-				DocumentBuilderFactory factory = DocumentBuilderFactory
-						.newInstance();
-				Document document = factory.newDocumentBuilder().newDocument();
+				Document document = XmlUtils.getNewDocumentBuilder().newDocument();
 				DocumentFragment docfrag = document.createDocumentFragment();
 				
 				Node contents = resultSoFar;
@@ -155,9 +146,7 @@ public class TagSingleBox extends SdtTagHandler {
 				return attachContents(docfrag, xhtmlDiv, contents);
 				
 			} catch (Exception e) {
-				e.printStackTrace();
-				System.out.println(e.toString());
-				log.error(e);
+				log.error(e.getMessage(), e);
 				throw new TransformerException(e);
 			}
 		}

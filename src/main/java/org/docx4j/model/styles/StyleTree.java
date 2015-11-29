@@ -1,17 +1,17 @@
 package org.docx4j.model.styles;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.log4j.Logger;
-import org.docx4j.model.PropertyResolver;
+import org.docx4j.XmlUtils;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.wml.Style;
 import org.docx4j.wml.Styles;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Represent a style hierarchy as a tree.
@@ -26,7 +26,7 @@ import org.docx4j.wml.Styles;
  */
 public class StyleTree {
 	
-	private static Logger log = Logger.getLogger(StyleTree.class);
+	private static Logger log = LoggerFactory.getLogger(StyleTree.class);
 
 	/**
 	 * Tree of table styles
@@ -52,7 +52,7 @@ public class StyleTree {
 		return cTree;
 	}
 
-
+	
 	/**
 	 * Build a StyleTree for stylesInUse. 
 	 * 
@@ -71,7 +71,9 @@ public class StyleTree {
                 if (style == null ) {
                 	log.warn("Couldn't find style: " + styleId);
                 	continue;
-                } 	        		
+                } else if (style.getType()==null) {
+                	log.warn("missing type: " + XmlUtils.marshaltoString(style)); 
+                } else
         		// Is it a table style?
         		if (style.getType().equals("table")) {                
 	            	// Need to create a node for this
@@ -96,10 +98,13 @@ public class StyleTree {
             	Style style = allStyles.get(styleId);
                 if (style == null ) {
                 	log.warn("Couldn't find style: " + styleId);
+                	// See BrokenStyleRemediator for some causes of this, and potential fix
                 	continue;
-                } 	        		
+                } 
+                                
         		// Is it a paragraph style?
-        		if (style.getType().equals("paragraph")) {                
+        		if (style.getType()!=null 
+        				&& style.getType().equals("paragraph")) {                
 	            	// Need to create a node for this
         			log.debug("Adding '" +  styleId + "' to paragraph tree" );
 	        		this.addNode(styleId, allStyles, pTree);
@@ -120,7 +125,8 @@ public class StyleTree {
                 	continue;
                 } 	        		
         		// Is it a character style?
-        		if (style.getType().equals("character")) {                
+        		if (style.getType()!=null 
+        				&& style.getType().equals("character")) {                
 	            	// Need to create a node for this
 	        		this.addNode(styleId, allStyles, cTree);
         		}
@@ -161,7 +167,9 @@ public class StyleTree {
         	if (tree.get(basedOnStyleName)==null) {
 //            	log.debug("..can disregard that null, but it shouldn't happen again for this style");        	
         		Node<AugmentedStyle> parent = addNode(basedOnStyleName, allStyles, tree);
-        		parent.addChild(n);
+        		if (parent!=null) {
+        			parent.addChild(n);
+        		}
         	} else {
         		tree.get(basedOnStyleName).addChild(n);
         	}
@@ -185,7 +193,7 @@ public class StyleTree {
 
     	
 		Map<String, Style> allStyles = new HashMap<String, Style>();
-		Styles styles = wmlPackage.getMainDocumentPart().getStyleDefinitionsPart().getJaxbElement();		
+		Styles styles = wmlPackage.getMainDocumentPart().getStyleDefinitionsPart(false).getJaxbElement();		
 		for ( org.docx4j.wml.Style s : styles.getStyle() ) {				
 			allStyles.put(s.getStyleId(), s);	
 			log.debug("live style: " + s.getStyleId() );

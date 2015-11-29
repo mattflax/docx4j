@@ -21,23 +21,28 @@
 package org.docx4j.samples;
 
 
+import java.io.IOException;
 import java.util.HashMap;
 
 import javax.xml.bind.JAXBElement;
 
-import org.apache.log4j.Logger;
 import org.docx4j.XmlUtils;
 import org.docx4j.openpackaging.contenttype.ContentTypeManager;
 import org.docx4j.openpackaging.packages.OpcPackage;
+import org.docx4j.openpackaging.parts.DefaultXmlPart;
 import org.docx4j.openpackaging.parts.JaxbXmlPart;
 import org.docx4j.openpackaging.parts.Part;
+import org.docx4j.openpackaging.parts.WordprocessingML.OleObjectBinaryPart;
+import org.docx4j.openpackaging.parts.WordprocessingML.VbaDataPart;
 import org.docx4j.openpackaging.parts.relationships.RelationshipsPart;
 import org.docx4j.relationships.Relationship;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class PartsList extends AbstractSample {
 	
-	private static Logger log = Logger.getLogger(PartsList.class);						
+	private static Logger log = LoggerFactory.getLogger(PartsList.class);						
 
 	/**
 	 * @param args
@@ -69,6 +74,9 @@ public class PartsList extends AbstractSample {
 		
 		System.out.println(sb.toString());
 		
+//		opcPackage.save( new File(System.getProperty("user.dir") + "/OUT_chart_drawing.xlsx")); 
+		
+		
 	}
 	
 	/**
@@ -94,15 +102,47 @@ public class PartsList extends AbstractSample {
 //		System.out.println("//" + p.getPartName() );
 //		System.out.println("public final static String XX =");
 //		System.out.println("\"" +  relationshipType +  "\";");
-		
+
 		if (p instanceof JaxbXmlPart) {
 			Object o = ((JaxbXmlPart)p).getJaxbElement();
 			if (o instanceof javax.xml.bind.JAXBElement) {
 				sb.append(" containing JaxbElement:" + XmlUtils.JAXBElementDebug((JAXBElement)o) );
 			} else {
-				sb.append(" containing JaxbElement:"  + o.getClass().getName() );
+				sb.append(" containing:"  + o.getClass().getName() );
+			}
+		} else if (p instanceof DefaultXmlPart) {
+			try {
+				org.w3c.dom.Document doc = ((DefaultXmlPart)p).getDocument();
+				Object o = XmlUtils.unmarshal(doc);
+				if (o instanceof javax.xml.bind.JAXBElement) {
+					sb.append(" containing JaxbElement:" + XmlUtils.JAXBElementDebug((JAXBElement)o) );
+				} else {
+					sb.append(" containing:"  + o.getClass().getName() );
+				}				
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+		}
+		
+		sb.append("\n content type: " + p.getContentType() + "\n");
+//		sb.append("\n reltype: " + p.getRelationshipType() + "\n");
+		
+		if (p instanceof OleObjectBinaryPart) {
+			
+			try {
+				((OleObjectBinaryPart)p).viewFile(false);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
 		}
+		
+		if (p instanceof VbaDataPart) {
+			System.out.println( ((VbaDataPart)p).getXML() );
+		}
+		
 	}
 	
 	/**

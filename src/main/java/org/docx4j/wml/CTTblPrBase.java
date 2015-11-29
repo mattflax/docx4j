@@ -1,5 +1,5 @@
 /*
- *  Copyright 2007-2008, Plutext Pty Ltd.
+ *  Copyright 2007-2013, Plutext Pty Ltd.
  *   
  *  This file is part of docx4j.
 
@@ -19,7 +19,9 @@
  */
 
 
-package org.docx4j.wml;
+package org.docx4j.wml; 
+
+import org.jvnet.jaxb2_commons.ppp.Child;
 
 import java.math.BigInteger;
 import javax.xml.bind.Unmarshaller;
@@ -28,7 +30,6 @@ import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlTransient;
 import javax.xml.bind.annotation.XmlType;
-import org.jvnet.jaxb2_commons.ppp.Child;
 
 
 /**
@@ -116,8 +117,7 @@ import org.jvnet.jaxb2_commons.ppp.Child;
     "tblCellMar",
     "tblLook"
 })
-public class CTTblPrBase
-    implements Child
+public class CTTblPrBase implements Child
 {
 
     protected CTTblPrBase.TblStyle tblStyle;
@@ -544,8 +544,7 @@ public class CTTblPrBase
      */
     @XmlAccessorType(XmlAccessType.FIELD)
     @XmlType(name = "")
-    public static class TblStyle
-        implements Child
+    public static class TblStyle implements Child
     {
 
         @XmlAttribute(name = "val", namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main")
@@ -630,8 +629,7 @@ public class CTTblPrBase
      */
     @XmlAccessorType(XmlAccessType.FIELD)
     @XmlType(name = "")
-    public static class TblStyleColBandSize
-        implements Child
+    public static class TblStyleColBandSize implements Child
     {
 
         @XmlAttribute(name = "val", namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main", required = true)
@@ -716,8 +714,7 @@ public class CTTblPrBase
      */
     @XmlAccessorType(XmlAccessType.FIELD)
     @XmlType(name = "")
-    public static class TblStyleRowBandSize
-        implements Child
+    public static class TblStyleRowBandSize implements Child
     {
 
         @XmlAttribute(name = "val", namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main", required = true)

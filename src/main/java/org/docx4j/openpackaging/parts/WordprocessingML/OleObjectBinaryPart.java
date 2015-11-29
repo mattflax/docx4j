@@ -28,7 +28,8 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.List;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.poi.poifs.dev.POIFSViewEngine;
 import org.apache.poi.poifs.filesystem.DirectoryNode;
 import org.apache.poi.poifs.filesystem.DocumentNode;
@@ -48,7 +49,7 @@ import org.docx4j.openpackaging.parts.relationships.Namespaces;
  */
 public class OleObjectBinaryPart extends BinaryPart {
 
-	private static Logger log = Logger.getLogger(OleObjectBinaryPart.class);		
+	private static Logger log = LoggerFactory.getLogger(OleObjectBinaryPart.class);		
 	
 	public OleObjectBinaryPart(PartName partName) throws InvalidFormatException {
 		super(partName);
@@ -90,11 +91,7 @@ public class OleObjectBinaryPart extends BinaryPart {
 			// so, for now, brute force..
 
 			log.info("initing POIFSFileSystem from existing data");
-			getBuffer().clear();
-	        byte[] bytes = new byte[getBuffer().capacity()];
-	        getBuffer().get(bytes, 0, bytes.length);
-			
-			ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
+			ByteArrayInputStream bais = new ByteArrayInputStream(this.getBytes());
 			fs = new POIFSFileSystem(bais);
 			
 		} else {

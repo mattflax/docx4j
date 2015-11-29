@@ -26,8 +26,6 @@ import java.util.Map;
 
 import javax.xml.XMLConstants;
 import javax.xml.namespace.NamespaceContext;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathFactory;
 
 import org.apache.commons.lang.text.StrTokenizer;
 import org.docx4j.openpackaging.parts.relationships.Namespaces;
@@ -159,6 +157,14 @@ public class NamespacePrefixMappings implements NamespaceContext {
 
     	if (namespaceUri.equals("http://schemas.microsoft.com/office/word/2006/wordml")) {
     		return "wne";
+    	}
+
+    	if (namespaceUri.equals("http://schemas.microsoft.com/office/word/2010/wordml")) {
+    		return "w14";
+    	}
+
+    	if (namespaceUri.equals("http://schemas.microsoft.com/office/word/2012/wordml")) {
+    		return "w15";
     	}
     	
     	if (namespaceUri.equals("http://schemas.microsoft.com/aml/2001/core")) {
@@ -326,6 +332,12 @@ public class NamespacePrefixMappings implements NamespaceContext {
 		if (prefix.equals("wne"))
 			return "http://schemas.microsoft.com/office/word/2006/wordml";
 
+		if (prefix.equals("w14"))
+			return "http://schemas.microsoft.com/office/word/2010/wordml";
+
+		if (prefix.equals("w15"))
+			return "http://schemas.microsoft.com/office/word/2012/wordml";
+		
 		if (prefix.equals("aml"))
 			return "http://schemas.microsoft.com/aml/2001/core";
 

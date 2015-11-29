@@ -85,7 +85,8 @@ package org.docx4j.model.listnumbering;
 
 import java.math.BigInteger;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.docx4j.wml.Lvl;
 import org.docx4j.wml.NumFmt;
 import org.docx4j.wml.NumberFormat;
@@ -107,7 +108,7 @@ public class ListLevel {
 	 * 
 	 */
 	
-	protected static Logger log = Logger.getLogger(ListLevel.class);
+	protected static Logger log = LoggerFactory.getLogger(ListLevel.class);
 	
 	private Lvl jaxbAbstractLvl;
 	public Lvl getJaxbAbstractLvl() {
@@ -126,10 +127,13 @@ public class ListLevel {
 	 */
 	private Counter counter; 
 	
-	private boolean encounteredAlready = false;
+
+	protected Counter getCounter() {
+		return counter;
+	}
 	
-	
-    /**
+
+	/**
      * Constructor for a ListLevel in an abstract definition.
      */
     public ListLevel(Lvl levelNode)
@@ -259,6 +263,7 @@ public class ListLevel {
 
     public void setStartValue(BigInteger startValue) {
 		this.startValue = startValue;
+    	startAtUsed = false;		
 	}
 
 	/**
@@ -351,19 +356,22 @@ public class ListLevel {
      */
     public void IncrementCounter()
     {
-    	if (!encounteredAlready) {
+    	if (startAtUsed==false
+    			|| (!counter.encounteredAlready)) {
     		// Defer setting the startValue until the list
     		// is actually encountered in the main document part,
     		// since otherwise earlier numbering (using the
     		// same abstract number) would use this startValue
-        	counter.setCurrentValue(this.startValue);  
-        	encounteredAlready = true;
+        	counter.setCurrentValue(this.startValue); 
+        	log.debug("not encounteredAlready; set to startValue " + startValue);
+        	counter.encounteredAlready = true;
+        	startAtUsed = true;
     	}
-    	
-    	
         counter.IncrementCounter();
-        
     }
+    
+	protected boolean startAtUsed = true;
+    
 
     /**
      * resets the counter to the start value
@@ -390,6 +398,7 @@ public class ListLevel {
      * returns the font name
      * @return
      */
+	@Deprecated
     public String getFont()
     {
             return this.font;
@@ -418,6 +427,13 @@ public class ListLevel {
     }
     
     protected class Counter {
+    	
+    	protected boolean encounteredAlready = false;
+    	
+        protected boolean isEncounteredAlready() {
+    		return encounteredAlready;
+    	}
+    	
     	
         private BigInteger currentValue;
         

@@ -21,18 +21,17 @@ package org.docx4j.model.images;
 
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 
-import org.apache.log4j.Logger;
 import org.docx4j.XmlUtils;
-import org.docx4j.convert.out.AbstractWmlConversionContext;
+import org.docx4j.convert.out.common.AbstractWmlConversionContext;
 import org.docx4j.jaxb.Context;
 import org.docx4j.openpackaging.packages.WordprocessingMLPackage;
 import org.docx4j.openpackaging.parts.Part;
 import org.docx4j.vml.CTImageData;
 import org.docx4j.vml.CTShape;
 import org.docx4j.wml.Pict;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.DocumentFragment;
 import org.w3c.dom.Node;
@@ -72,7 +71,7 @@ import org.w3c.dom.traversal.NodeIterator;
  */
 public class WordXmlPictureE10 extends AbstractWordXmlPicture {
 	
-	protected static Logger log = Logger.getLogger(WordXmlPictureE10.class);
+	protected static Logger log = LoggerFactory.getLogger(WordXmlPictureE10.class);
 	
 	Pict pict;
 	    
@@ -193,27 +192,36 @@ public class WordXmlPictureE10 extends AbstractWordXmlPicture {
     
     
     /** Extension function to create an <img> element
-     * from "E1.0 images"
-     *  
-     *      //w:pict
-     * @param wmlPackage
-     * @param imageDirPath
-     * @param shape
-     * @param imageData
-     * @return
+     * from "E1.0 images" //w:pict
      */
     public static DocumentFragment createHtmlImgE10(
     		AbstractWmlConversionContext context,
     		Object wpict) {
     	
+    	return createHtmlImgE10(context, wpict, null);
+    }
+
+    /** Extension function to create an <img> element
+     * from "E1.0 images" ie //w:pict
+     * with a custom ID
+     */
+    public static DocumentFragment createHtmlImgE10(
+    		AbstractWmlConversionContext context,
+    		Object wpict, String id) {
+    	
+    	Part sourcePart = context.getCurrentPart();
 
     	WordXmlPictureE10 converter = createWordXmlPictureFromE10(context.getWmlPackage(),
         		 context.getImageHandler(),
-        		 wpict, context.getWmlPackage().getMainDocumentPart());
+        		 wpict, sourcePart);
+    	
+    	if (id!=null) {
+    		converter.setID(id);
+    	}
     	
     	return getHtmlDocumentFragment(converter);
     }
-
+    
     /** Extension function to create an <img> element
      * from "E1.0 images"
      *  
@@ -241,15 +249,8 @@ public class WordXmlPictureE10 extends AbstractWordXmlPicture {
     		
     		log.error("WordXmlPictureE10 object was null!");
     		
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            Document d;
-			try {
-				d = factory.newDocumentBuilder().newDocument();
-	    		return d.createDocumentFragment();
-			} catch (ParserConfigurationException e) {
-				log.error(e);
-				return null;
-			}  
+            Document d = XmlUtils.getNewDocumentBuilder().newDocument();
+	    	return d.createDocumentFragment();
 			
     	} else {
     	
@@ -270,8 +271,9 @@ public class WordXmlPictureE10 extends AbstractWordXmlPicture {
      */
     public static DocumentFragment createXslFoImgE10(
     		AbstractWmlConversionContext context,
-    		Object wpict,
-    		Part sourcePart) {
+    		Object wpict) {
+    	
+    	Part sourcePart = context.getCurrentPart();
     	
     	WordXmlPictureE10 converter = createWordXmlPictureFromE10(
     			 context.getWmlPackage(),
@@ -284,15 +286,8 @@ public class WordXmlPictureE10 extends AbstractWordXmlPicture {
     		
     		log.error("WordXmlPictureE10 object was null!");
     		
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            Document d;
-			try {
-				d = factory.newDocumentBuilder().newDocument();
-	    		return d.createDocumentFragment();
-			} catch (ParserConfigurationException e) {
-				log.error(e);
-				return null;
-			}  
+            Document d= XmlUtils.getNewDocumentBuilder().newDocument();
+	    	return d.createDocumentFragment();
 			
     	} else {
     	
@@ -401,11 +396,11 @@ public class WordXmlPictureE10 extends AbstractWordXmlPicture {
     	if (val.endsWith("pt") ) {
     		f = Float.parseFloat(val.substring(0, val.length()-2));
     		unit="pt";
-    		log.debug(f);    		
+    		log.debug(f +"pt");    		
     	} else if (val.endsWith("in") ) {
     		f = Float.parseFloat(val.substring(0, val.length()-2));
     		unit="in";
-    		log.debug(f);    		
+    		log.debug(f + "in");    		
 
     	} else {
     		// Unknown units

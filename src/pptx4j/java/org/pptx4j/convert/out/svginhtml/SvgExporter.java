@@ -5,15 +5,12 @@ import java.io.ByteArrayOutputStream;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.Result;
 import javax.xml.transform.Source;
 import javax.xml.transform.Templates;
 import javax.xml.transform.stream.StreamResult;
 import javax.xml.transform.stream.StreamSource;
 
-import org.apache.log4j.Logger;
 import org.docx4j.XmlUtils;
 import org.docx4j.convert.out.AbstractConversionSettings;
 import org.docx4j.convert.out.html.HtmlCssHelper;
@@ -40,6 +37,8 @@ import org.pptx4j.model.ResolvedLayout;
 import org.pptx4j.model.TextStyles;
 import org.pptx4j.pml.CxnSp;
 import org.pptx4j.pml.GroupShape;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.DocumentFragment;
 import org.w3c.dom.Element;
@@ -64,7 +63,7 @@ public class SvgExporter {
 	
 	// NB: file suffix must end with .xhtml in order to see the SVG in a browser
 	
-	protected static Logger log = Logger.getLogger(SvgExporter.class);	
+	protected static Logger log = LoggerFactory.getLogger(SvgExporter.class);	
 
 	public static JAXBContext jcSVG;	
     static ObjectFactory oFactory;
@@ -152,11 +151,11 @@ public class SvgExporter {
 		if (settings == null) {
 			settings = new SvgSettings();
 		}
-		settings.setWmlPackage(presentationMLPackage);
 		if ((settings.getImageDirPath() == null) && (imageDirPath != null)) {
 			settings.setImageDirPath(imageDirPath);
 		}
-		context = new SvgConversionContext(settings, layout);
+		
+		context = new SvgConversionContext(settings, presentationMLPackage, layout);
 		org.docx4j.XmlUtils.transform(doc, xslt, context.getXsltParameters(), result);
 	}
 
@@ -208,8 +207,7 @@ public class SvgExporter {
         	
         	
             // Create a DOM builder and parse the fragment			
-        	DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();        
-			Document document = factory.newDocumentBuilder().newDocument();
+			Document document = XmlUtils.getNewDocumentBuilder().newDocument();
 			
 			//log.info("Document: " + document.getClass().getName() );
 
@@ -225,7 +223,7 @@ public class SvgExporter {
 			);
 			
 
-			StringBuffer inlineStyle =  new StringBuffer();
+			StringBuilder inlineStyle =  new StringBuilder();
 			// Do we have CTTextParagraphProperties
 			// <a:lvl?pPr>
 			// Convert it to a WordML pPr
@@ -307,9 +305,7 @@ public class SvgExporter {
 			return docfrag;
 						
 		} catch (Exception e) {
-			e.printStackTrace();
-			System.out.println(e.toString() );
-			log.error(e);
+			log.error(e.getMessage(), e);
 		} 
     	
     	return null;
@@ -369,9 +365,7 @@ public class SvgExporter {
 		try {
 
 			// Create a DOM builder and parse the fragment
-			DocumentBuilderFactory factory = DocumentBuilderFactory
-					.newInstance();
-			d = factory.newDocumentBuilder().newDocument();
+			d = XmlUtils.getNewDocumentBuilder().newDocument();
 
 			span = d.createElement("span");
 			d.appendChild(span);
@@ -382,7 +376,7 @@ public class SvgExporter {
 			RPr rPr = TextStyles.getWmlRPr(textCharProps);
 
 			// Does our rPr contain anything else?
-			StringBuffer inlineStyle = new StringBuffer();
+			StringBuilder inlineStyle = new StringBuilder();
 			HtmlCssHelper.createCss(context.getPmlPackage(), rPr, inlineStyle);
 			if (!inlineStyle.toString().equals("")) {
 				span.setAttribute("style", inlineStyle.toString());
@@ -392,8 +386,7 @@ public class SvgExporter {
 			XmlUtils.treeCopy(n, span);
 
 		} catch (Exception e) {
-			e.printStackTrace();
-			log.error(e);
+			log.error(e.getMessage(), e);
 			// If something went wrong with the formatting,
 			// still try to display the text!
 			Node n = childResults.nextNode();
@@ -432,7 +425,7 @@ public class SvgExporter {
 	
     public static String getCssForStyles(SvgConversionContext context) {
     	
-    	StringBuffer result = new StringBuffer();
+    	StringBuilder result = new StringBuilder();
     	
 		StyleTree styleTree=null;
 		try {
@@ -498,7 +491,7 @@ public class SvgExporter {
     			}
     		}
     	} catch (Exception e) {
-			log.error(e);
+			log.error(e.getMessage(), e);
 			d=makeErr(e.getMessage() );
 		}
     	
@@ -533,7 +526,7 @@ public class SvgExporter {
     	b.toPixels();
 
     	// Wrap in a div positioning it on the page
-    	Document document = createDocument();
+    	Document document = XmlUtils.getNewDocumentBuilder().newDocument();
 		Element xhtmlDiv = document.createElement("div");
 		// Firefox needs the following; Chrome doesn't
 		xhtmlDiv.setAttribute("style", 
@@ -564,14 +557,7 @@ public class SvgExporter {
     }
 
     private static Document makeErr(String msg) {
-    	Document d=null;
-    	DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();        
-		 try {
-			d = factory.newDocumentBuilder().newDocument();
-		} catch (ParserConfigurationException e1) {
-			// TODO Auto-generated catch block
-			e1.printStackTrace();
-		}
+    	Document d=XmlUtils.getNewDocumentBuilder().newDocument();
 		Element span = d.createElement("span");
 		span.setAttribute("style", "color:red;");
 		d.appendChild(span);
@@ -623,15 +609,4 @@ public class SvgExporter {
 		}        	        			    	
     }
     
-    public static Document createDocument() {
-    	
-    	DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();        
-		Document document=null;
-		try {
-			document = factory.newDocumentBuilder().newDocument();
-		} catch (ParserConfigurationException e) {
-			e.printStackTrace();
-		}
-		return document;
-    }
 }

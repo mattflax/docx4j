@@ -23,13 +23,15 @@ package org.docx4j.openpackaging.packages;
 
 import javax.xml.bind.JAXBException;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.docx4j.openpackaging.contenttype.ContentType;
 import org.docx4j.openpackaging.contenttype.ContentTypeManager;
 import org.docx4j.openpackaging.contenttype.ContentTypes;
 import org.docx4j.openpackaging.exceptions.Docx4JException;
 import org.docx4j.openpackaging.exceptions.InvalidFormatException;
 import org.docx4j.openpackaging.io.SaveToZipFile;
+import org.docx4j.openpackaging.io3.stores.ZipPartStore;
 import org.docx4j.openpackaging.parts.DocPropsCorePart;
 import org.docx4j.openpackaging.parts.DocPropsCustomPart;
 import org.docx4j.openpackaging.parts.DocPropsExtendedPart;
@@ -40,6 +42,8 @@ import org.docx4j.openpackaging.parts.SpreadsheetML.WorksheetPart;
 import org.docx4j.openpackaging.parts.relationships.Namespaces;
 import org.docx4j.relationships.Relationship;
 import org.xlsx4j.jaxb.Context;
+import org.xlsx4j.sml.BookViews;
+import org.xlsx4j.sml.CTBookView;
 import org.xlsx4j.sml.Sheet;
 import org.xlsx4j.sml.Sheets;
 import org.xlsx4j.sml.Worksheet;
@@ -52,7 +56,7 @@ import org.xlsx4j.sml.Worksheet;
  */
 public class SpreadsheetMLPackage extends OpcPackage {
 	
-	protected static Logger log = Logger.getLogger(SpreadsheetMLPackage.class);
+	protected static Logger log = LoggerFactory.getLogger(SpreadsheetMLPackage.class);
 		
 	
 	/**
@@ -137,7 +141,19 @@ public class SpreadsheetMLPackage extends OpcPackage {
 			);
 			xlsPack.addTargetPart(xlsPack.wb);	
 			
-			xlsPack.wb.getJaxbElement().setSheets(
+			/* Without the following, Excel 2010 might crash if you try to print
+			 * (it seems to depend on the content of your sheet).
+			 * 
+			 * <bookViews>
+				    <workbookView />
+				  </bookViews>
+			 */
+			BookViews bookview = Context.getsmlObjectFactory().createBookViews();
+			CTBookView ctBookview = Context.getsmlObjectFactory().createCTBookView();
+			bookview.getWorkbookView().add(ctBookview);
+			xlsPack.wb.getContents().setBookViews(bookview);			
+			
+			xlsPack.wb.getContents().setSheets(
 					Context.getsmlObjectFactory().createSheets()					
 			);
 			
@@ -145,7 +161,7 @@ public class SpreadsheetMLPackage extends OpcPackage {
 			e.printStackTrace();
 			throw new InvalidFormatException("Couldn't create package", e);
 		}
-
+		
 		// Return the new package
 		return xlsPack;
 		
